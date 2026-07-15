@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 获客 - 全流程</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px 0; margin-bottom: 24px; }
+    header .container { display: flex; justify-content: space-between; align-items: center; }
+    header h1 { font-size: 24px; font-weight: 600; }
+    nav a { color: white; text-decoration: none; margin-left: 20px; opacity: 0.9; }
+    nav a:hover { opacity: 1; }
+    .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .card h2 { font-size: 18px; margin-bottom: 16px; color: #444; }
+    .form-row { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+    .form-group { flex: 1; min-width: 200px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: #666; }
+    .form-group input, .form-group textarea { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; }
+    .form-group textarea { resize: vertical; min-height: 60px; }
+    .btn { padding: 10px 24px; border: none; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+    .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; font-size: 16px; padding: 14px 32px; }
+    .btn-primary:hover { opacity: 0.9; }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-secondary { background: #f0f0f0; color: #333; }
+    .status-bar { padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; }
+    .status-info { background: #e3f2fd; color: #1565c0; }
+    .status-success { background: #e8f5e9; color: #2e7d32; }
+    .status-error { background: #ffebee; color: #c62828; }
+    .pipeline-steps { display: flex; gap: 12px; margin-bottom: 20px; }
+    .step { flex: 1; padding: 16px; border-radius: 10px; text-align: center; background: #fafafa; border: 2px solid #eee; transition: all 0.3s; }
+    .step.active { border-color: #667eea; background: #f0f3ff; }
+    .step.done { border-color: #4caf50; background: #e8f5e9; }
+    .step-icon { font-size: 28px; margin-bottom: 4px; }
+    .step-label { font-size: 13px; font-weight: 500; color: #666; }
+    .step-status { font-size: 12px; color: #999; margin-top: 4px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; font-size: 13px; }
+    th { font-weight: 600; color: #666; background: #fafafa; }
+    .section-title { font-size: 16px; font-weight: 600; margin: 20px 0 12px; color: #444; }
+    .result-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+    .result-item { border: 1px solid #eee; border-radius: 8px; padding: 12px; font-size: 13px; }
+    .result-item h4 { font-size: 14px; margin-bottom: 6px; }
+    .result-item .meta { color: #999; font-size: 12px; }
+    .confidence { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+    .conf-high { background: #e8f5e9; color: #2e7d32; }
+    .conf-mid { background: #fff3e0; color: #ef6c00; }
+    .conf-low { background: #fafafa; color: #999; }
+    #results-section { display: none; }
+    .summary-stats { display: flex; gap: 16px; margin-bottom: 16px; }
+    .stat-box { flex: 1; padding: 16px; background: #fafafa; border-radius: 10px; text-align: center; }
+    .stat-value { font-size: 28px; font-weight: 700; color: #667eea; }
+    .stat-label { font-size: 12px; color: #999; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <h1>🔍 AI 获客系统</h1>
+      <nav>
+        <a href="/">扫描</a>
+        <a href="/enrich.html">补全</a>
+        <a href="/pipeline.html">全流程</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- 配置 -->
+    <div class="card">
+      <h2>⚡ 一键全流程 (SCAN → ENRICH)</h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label>公司名称</label>
+          <input type="text" id="companyName" placeholder="例：VertaX">
+        </div>
+        <div class="form-group">
+          <label>行业</label>
+          <input type="text" id="industry" placeholder="例：Industrial Automation">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="flex:2">
+          <label>搜索关键词（留空则 AI 自动生成）</label>
+          <textarea id="keywords" placeholder="每行一个关键词"></textarea>
+        </div>
+        <div class="form-group">
+          <label>目标国家</label>
+          <input type="text" id="countries" placeholder="例：Thailand, Vietnam">
+          <label style="margin-top:12px">补全前 N 个结果</label>
+          <input type="number" id="enrichTopN" value="10" min="1" max="50">
+        </div>
+      </div>
+      <div style="margin-top:16px;text-align:center">
+        <button class="btn btn-primary" id="runBtn" onclick="runPipeline()">🚀 一键执行全流程</button>
+      </div>
+    </div>
+
+    <!-- 进度步骤 -->
+    <div class="pipeline-steps" id="steps" style="display:none">
+      <div class="step" id="step-scan">
+        <div class="step-icon">🔍</div>
+        <div class="step-label">SCAN 扫描</div>
+        <div class="step-status" id="step-scan-status">等待中</div>
+      </div>
+      <div class="step" id="step-enrich">
+        <div class="step-icon">🧠</div>
+        <div class="step-label">ENRICH 补全</div>
+        <div class="step-status" id="step-enrich-status">等待中</div>
+      </div>
+      <div class="step" id="step-done">
+        <div class="step-icon">✅</div>
+        <div class="step-label">完成</div>
+        <div class="step-status" id="step-done-status">等待中</div>
+      </div>
+    </div>
+
+    <!-- 状态 -->
+    <div id="statusBar" class="status-bar status-info" style="display:none"></div>
+
+    <!-- 结果 -->
+    <div id="results-section">
+      <!-- 统计 -->
+      <div class="summary-stats" id="summaryStats"></div>
+
+      <!-- 扫描结果 -->
+      <div class="card" id="scanResultsCard" style="display:none">
+        <h2>🔍 扫描发现的企业</h2>
+        <div id="scanResults"></div>
+      </div>
+
+      <!-- 补全结果 -->
+      <div class="card" id="enrichResultsCard" style="display:none">
+        <h2>🧠 情报补全结果</h2>
+        <div id="enrichResults"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = '';
+
+    async function runPipeline() {
+      const btn = document.getElementById('runBtn');
+      btn.disabled = true;
+      btn.textContent = '⏳ 执行中...';
+
+      document.getElementById('steps').style.display = 'flex';
+      document.getElementById('results-section').style.display = 'block';
+      setStep('scan', 'active', '执行中...');
+      showStatus('正在执行全流程...', 'info');
+
+      const keywordsText = document.getElementById('keywords').value.trim();
+      const keywords = keywordsText ? keywordsText.split('\n').map(k => k.trim()).filter(Boolean) : [];
+      const countriesText = document.getElementById('countries').value.trim();
+      const countries = countriesText ? countriesText.split(',').map(c => c.trim()).filter(Boolean) : [];
+
+      const body = {
+        companyName: document.getElementById('companyName').value.trim() || undefined,
+        industry: document.getElementById('industry').value.trim() || undefined,
+        keywords: keywords.length ? keywords : undefined,
+        countries: countries.length ? countries : undefined,
+        enrichTopN: parseInt(document.getElementById('enrichTopN').value, 10) || 10,
+      };
+
+      try {
+        const res = await fetch(`${API}/api/pipeline/run`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          const result = data.data;
+          setStep('scan', 'done', `发现 ${result.scanResult.totalFound}`);
+          setStep('enrich', 'done', `补全 ${result.enrichResults.length}`);
+          setStep('done', 'done', `${(result.totalDuration/1000).toFixed(1)}s`);
+          showStatus(`✅ 全流程完成！耗时 ${(result.totalDuration/1000).toFixed(1)}s`, 'success');
+          renderPipelineResults(result);
+        } else {
+          showStatus(`❌ 失败: ${data.error}`, 'error');
+          setStep('scan', '', '失败');
+        }
+      } catch (e) {
+        showStatus(`❌ 请求失败: ${e.message}`, 'error');
+      }
+
+      btn.disabled = false;
+      btn.textContent = '🚀 一键执行全流程';
+    }
+
+    function renderPipelineResults(result) {
+      // 统计
+      const totalEmails = result.enrichResults.reduce((s, r) => s + (r.emails?.length || 0), 0);
+      const totalDMs = result.enrichResults.reduce((s, r) => s + (r.decisionMakers?.length || 0), 0);
+      const avgConf = result.enrichResults.length
+        ? (result.enrichResults.reduce((s, r) => s + (r.confidenceScore || 0), 0) / result.enrichResults.length * 100).toFixed(0)
+        : 0;
+
+      document.getElementById('summaryStats').innerHTML = `
+        <div class="stat-box"><div class="stat-value">${result.scanResult.totalFound}</div><div class="stat-label">发现企业</div></div>
+        <div class="stat-box"><div class="stat-value">${result.enrichResults.length}</div><div class="stat-label">补全企业</div></div>
+        <div class="stat-box"><div class="stat-value">${totalEmails}</div><div class="stat-label">找到邮箱</div></div>
+        <div class="stat-box"><div class="stat-value">${totalDMs}</div><div class="stat-label">决策人</div></div>
+        <div class="stat-box"><div class="stat-value">${avgConf}%</div><div class="stat-label">平均置信度</div></div>
+      `;
+
+      // 补全结果详情
+      if (result.enrichResults.length > 0) {
+        document.getElementById('enrichResultsCard').style.display = 'block';
+        let html = '<div class="result-grid">';
+        for (const r of result.enrichResults) {
+          const confClass = r.confidenceScore >= 0.6 ? 'conf-high' : r.confidenceScore >= 0.3 ? 'conf-mid' : 'conf-low';
+          const conf = ((r.confidenceScore || 0) * 100).toFixed(0);
+          html += `<div class="result-item">
+            <h4>${esc(r.companyName)} <span class="confidence ${confClass}">${conf}%</span></h4>
+            ${r.website ? `<div>🌐 <a href="${esc(r.website)}" target="_blank">${esc(r.website)}</a></div>` : ''}
+            ${r.emails?.length ? `<div>📧 ${r.emails.map(esc).join(', ')}</div>` : ''}
+            ${r.decisionMakers?.length ? `<div>👤 ${r.decisionMakers.length} 位决策人</div>` : ''}
+            ${r.description ? `<div class="meta">${esc(r.description.slice(0, 100))}...</div>` : ''}
+          </div>`;
+        }
+        html += '</div>';
+        document.getElementById('enrichResults').innerHTML = html;
+      }
+    }
+
+    function setStep(step, state, text) {
+      const el = document.getElementById(`step-${step}`);
+      el.className = `step ${state}`;
+      document.getElementById(`step-${step}-status`).textContent = text;
+    }
+
+    function showStatus(msg, type) {
+      const bar = document.getElementById('statusBar');
+      bar.textContent = msg;
+      bar.className = `status-bar status-${type}`;
+      bar.style.display = 'block';
+    }
+
+    function esc(str) {
+      if (!str) return '';
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>
