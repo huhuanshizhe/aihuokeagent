@@ -1,7 +1,3 @@
-node_modules/
-dist/
+# Runtime files are intentionally versioned for this deployment repository.
+# Secrets stay local and are configured through GitHub Secrets.
 .env
-data/*.db
-data/*.db-*
-data/cache/*.csv
-*.log
