@@ -1,3 +1,4 @@
 # Runtime files are intentionally versioned for this deployment repository.
 # Secrets stay local and are configured through GitHub Secrets.
 .env
+node_modules/
