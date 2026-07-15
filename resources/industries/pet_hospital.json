@@ -1,0 +1,16 @@
+{
+  "id": "pet_hospital",
+  "version": "1.0.0",
+  "status": "active",
+  "name": "Pet Hospital and Veterinary Clinic",
+  "aliases": ["pet hospital", "veterinary clinic", "animal clinic", "veterinarian", "宠物医院", "兽医诊所", "klinik veterinar", "hospital haiwan"],
+  "entityType": "healthcare_provider",
+  "keywords": ["pet hospital", "veterinary clinic", "animal clinic", "24 hour veterinary hospital"],
+  "negativeKeywords": ["pet shop", "pet grooming", "pet food", "animal rescue", "shelter", "boarding only", "宠物店", "宠物美容"],
+  "localTerms": {
+    "MY": ["hospital haiwan", "klinik veterinar", "klinik haiwan", "doktor veterinar", "宠物医院", "兽医诊所"]
+  },
+  "sourceTypes": ["professional_registry", "maps", "association_directory", "web_search"],
+  "qualificationSignals": ["veterinary services", "licensed veterinarian", "clinic address", "appointment phone", "official website"],
+  "updatedAt": "2026-07-15"
+}

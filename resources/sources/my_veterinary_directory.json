@@ -1,0 +1,7 @@
+{
+  "code": "my_veterinary_directory", "version": "0.1.0", "name": "Malaysia Veterinary Directory Candidate", "status": "research",
+  "sourceType": "professional_registry", "authority": "official", "countries": ["MY"], "industries": ["pet_hospital"],
+  "fields": ["clinic", "veterinarian", "location", "license_evidence"],
+  "requiresApiKey": false, "costModel": "unknown", "refreshPolicy": "to_be_verified", "cachePolicy": "disabled_until_terms_review", "qualityBaseline": 0.75,
+  "notes": "Research placeholder. Promote to active only after authority, access method, licensing, schema and refresh tests are documented."
+}

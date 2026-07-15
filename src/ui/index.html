@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 获客 - 扫描面板</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px 0; margin-bottom: 24px; }
+    header .container { display: flex; justify-content: space-between; align-items: center; }
+    header h1 { font-size: 24px; font-weight: 600; }
+    nav a { color: white; text-decoration: none; margin-left: 20px; opacity: 0.9; }
+    nav a:hover { opacity: 1; }
+    .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .card h2 { font-size: 18px; margin-bottom: 16px; color: #444; }
+    .form-row { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+    .form-group { flex: 1; min-width: 200px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: #666; }
+    .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; }
+    .form-group textarea { resize: vertical; min-height: 80px; }
+    .btn { padding: 10px 24px; border: none; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+    .btn-primary { background: #667eea; color: white; }
+    .btn-primary:hover { background: #5a6fd6; }
+    .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
+    .btn-secondary { background: #f0f0f0; color: #333; }
+    .btn-secondary:hover { background: #e0e0e0; }
+    .status-bar { padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; }
+    .status-info { background: #e3f2fd; color: #1565c0; }
+    .status-success { background: #e8f5e9; color: #2e7d32; }
+    .status-error { background: #ffebee; color: #c62828; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+    th { font-size: 13px; font-weight: 600; color: #666; background: #fafafa; }
+    td { font-size: 14px; }
+    tr:hover { background: #f9f9f9; }
+    .score { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+    .score-high { background: #e8f5e9; color: #2e7d32; }
+    .score-mid { background: #fff3e0; color: #ef6c00; }
+    .score-low { background: #fafafa; color: #999; }
+    .actions { display: flex; gap: 8px; }
+    .tag { display: inline-block; padding: 2px 8px; background: #f0f0f0; border-radius: 4px; font-size: 12px; margin: 2px; }
+    #results-section { display: none; }
+    .loading { text-align: center; padding: 40px; color: #999; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <h1>🔍 AI 获客系统</h1>
+      <nav>
+        <a href="/">扫描</a>
+        <a href="/enrich.html">补全</a>
+        <a href="/pipeline.html">全流程</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- 扫描配置 -->
+    <div class="card">
+      <h2>📋 扫描配置</h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label>公司名称（用于 AI 生成关键词）</label>
+          <input type="text" id="companyName" placeholder="例：VertaX">
+        </div>
+        <div class="form-group">
+          <label>行业</label>
+          <input type="text" id="industry" placeholder="例：Industrial Automation">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="flex:2">
+          <label>搜索关键词（手动输入，留空则 AI 自动生成）</label>
+          <textarea id="keywords" placeholder="每行一个关键词，例：&#10;agricultural machinery distributor Thailand&#10;farm equipment dealer Vietnam"></textarea>
+        </div>
+        <div class="form-group">
+          <label>目标国家</label>
+          <input type="text" id="countries" placeholder="例：Thailand, Vietnam">
+          <label style="margin-top:12px">产品（辅助 AI 生成）</label>
+          <input type="text" id="products" placeholder="例：PLC, HMI, Servo">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>适配器</label>
+          <select id="adapters" multiple style="min-height:80px">
+            <option value="__auto__" selected>自动规划数据源（推荐）</option>
+            <option value="google_places">Google Places</option>
+            <option value="ai_search">AI Search</option>
+            <option value="brave_places">Brave Places（本地搜索）</option>
+            <option value="thailand_factory">泰国工业部工厂库</option>
+            <option value="apollo">Apollo</option>
+          </select>
+          <small style="display:block;margin-top:6px;color:#667085">自动模式根据“国家资源包 × 行业资源包”选源；手动选择 Provider 将覆盖自动规划。</small>
+        </div>
+        <div class="form-group">
+          <label>每适配器最大结果数</label>
+          <input type="number" id="maxResults" value="20" min="1" max="100">
+        </div>
+      </div>
+      <div style="margin-top:16px">
+        <button class="btn btn-secondary" onclick="previewResourcePlan()" style="margin-right:8px">🧭 预览资源策略</button>
+        <a class="btn btn-secondary" href="/resources.html" style="margin-right:8px;text-decoration:none">资源中心</a>
+        <button class="btn btn-primary" id="scanBtn" onclick="startScan()">🚀 开始扫描</button>
+        <button class="btn btn-secondary" onclick="loadHistory()" style="margin-left:8px">📜 历史记录</button>
+      </div>
+    </div>
+
+    <!-- 状态 -->
+    <div id="statusBar" class="status-bar status-info" style="display:none"></div>
+
+    <!-- 结果 -->
+    <div id="results-section" class="card">
+      <h2>📊 扫描结果 <span id="resultCount" style="color:#999;font-size:14px"></span></h2>
+      <div id="resultsContent">
+        <div class="loading">等待扫描...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = '';
+
+    async function previewResourcePlan() {
+      const keywordsText = document.getElementById('keywords').value.trim();
+      const countriesText = document.getElementById('countries').value.trim();
+      const body = {
+        industry: document.getElementById('industry').value.trim() || undefined,
+        keywords: keywordsText ? keywordsText.split('\n').map(v => v.trim()).filter(Boolean) : [],
+        countries: countriesText ? countriesText.split(',').map(v => v.trim()).filter(Boolean) : [],
+      };
+      let box = document.getElementById('resourcePlan');
+      if (!box) {
+        box = document.createElement('pre');
+        box.id = 'resourcePlan';
+        box.style.cssText = 'margin-top:14px;padding:14px;background:#f6f8fa;border-radius:8px;white-space:pre-wrap';
+        document.getElementById('scanBtn').parentElement.appendChild(box);
+      }
+      box.textContent = '正在生成国家 × 行业资源策略...';
+      try {
+        const response = await fetch(`${API}/api/resources/plan`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const result = await response.json();
+        if (!result.success) throw new Error(result.error || '规划失败');
+        const p = result.data;
+        box.textContent = [
+          `市场包：${p.marketPackId || '全球默认'} ${p.marketPackVersion || ''}`,
+          `行业包：${p.industryPackId || '未匹配'} ${p.industryPackVersion || ''}`,
+          `推荐来源：${p.sources.map(s => `${s.sourceCode}(${s.score})`).join(', ') || '无'}`,
+          `执行适配器：${p.recommendedAdapters.join(', ') || '无'}`,
+          `关键词：${p.keywords.join(' | ')}`,
+          `排除词：${p.negativeKeywords.join(' | ')}`,
+          `区域：${p.clusters.map(c => c.name).join(', ') || '未配置'}`,
+          ...(p.warnings || []).map(w => `警告：${w}`),
+        ].join('\n');
+      } catch (error) { box.textContent = `策略生成失败：${error.message}`; }
+    }
+
+    async function startScan() {
+      const btn = document.getElementById('scanBtn');
+      btn.disabled = true;
+      btn.textContent = '⏳ 扫描中...';
+      showStatus('正在执行扫描...', 'info');
+
+      const keywordsText = document.getElementById('keywords').value.trim();
+      const keywords = keywordsText ? keywordsText.split('\n').map(k => k.trim()).filter(Boolean) : [];
+      const countriesText = document.getElementById('countries').value.trim();
+      const countries = countriesText ? countriesText.split(',').map(c => c.trim()).filter(Boolean) : [];
+      const productsText = document.getElementById('products').value.trim();
+      const products = productsText ? productsText.split(',').map(p => p.trim()).filter(Boolean) : [];
+      const adapterSelect = document.getElementById('adapters');
+      const selectedAdapters = Array.from(adapterSelect.selectedOptions).map(o => o.value);
+      const adapters = selectedAdapters.filter(value => value !== '__auto__');
+      const useAutomaticPlanning = selectedAdapters.includes('__auto__') && adapters.length === 0;
+
+      const body = {
+        companyName: document.getElementById('companyName').value.trim() || undefined,
+        industry: document.getElementById('industry').value.trim() || undefined,
+        keywords: keywords.length ? keywords : undefined,
+        countries: countries.length ? countries : undefined,
+        products: products.length ? products : undefined,
+        adapters: useAutomaticPlanning ? undefined : (adapters.length ? adapters : undefined),
+        maxResults: parseInt(document.getElementById('maxResults').value, 10) || 20,
+      };
+
+      try {
+        const res = await fetch(`${API}/api/scan`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          const r = data.data;
+          showStatus(`✅ 发现完成：抓取 ${r.totalFetched ?? r.totalFound} 条，合格 ${r.totalQualified ?? 0} 家，待验证 ${r.totalReview ?? 0} 家，过滤 ${r.totalRejected ?? 0} 条，新增 ${r.totalNew} 家，耗时 ${(r.duration/1000).toFixed(1)}s`, 'success');
+          if (r.errors?.length) showStatus(`⚠️ 部分错误: ${r.errors.join('; ')}`, 'error');
+          if (r.warnings?.length) showStatus(`⚠️ Provider 警告: ${r.warnings.join('; ')}`, 'error');
+          await loadResults(r.runId);
+        } else {
+          showStatus(`❌ 扫描失败: ${data.error}`, 'error');
+        }
+      } catch (e) {
+        showStatus(`❌ 请求失败: ${e.message}`, 'error');
+      }
+
+      btn.disabled = false;
+      btn.textContent = '🚀 开始扫描';
+    }
+
+    async function loadResults(runId) {
+      try {
+        const res = await fetch(`${API}/api/scan/results?runId=${runId}`);
+        const data = await res.json();
+        if (!data.success) return;
+
+        const candidates = data.data.candidates;
+        document.getElementById('resultCount').textContent = `(${candidates.length} 个)`;
+        document.getElementById('results-section').style.display = 'block';
+
+        if (candidates.length === 0) {
+          document.getElementById('resultsContent').innerHTML = '<div class="loading">未发现企业</div>';
+          return;
+        }
+
+        let html = '<table><thead><tr><th>企业名</th><th>国家</th><th>行业</th><th>网站</th><th>资格</th><th>评分</th><th>操作</th></tr></thead><tbody>';
+        for (const c of candidates) {
+          const scoreClass = c.matchScore >= 0.7 ? 'score-high' : c.matchScore >= 0.4 ? 'score-mid' : 'score-low';
+          const score = c.matchScore ? (c.matchScore * 100).toFixed(0) : '-';
+          html += `<tr>
+            <td><strong>${esc(c.displayName)}</strong></td>
+            <td>${esc(c.country || '-')}</td>
+            <td>${esc(c.industry || '-')}</td>
+            <td>${c.website ? `<a href="${esc(c.website)}" target="_blank">${esc(new URL(c.website).hostname)}</a>` : '-'}</td>
+            <td>${c.qualificationTier === 'qualified' ? '✅ 合格' : c.qualificationTier === 'review' ? '🟡 待验证' : '—'}</td>
+            <td><span class="score ${scoreClass}">${score}</span></td>
+            <td class="actions">
+              <button class="btn btn-secondary" style="padding:4px 12px;font-size:12px" onclick="enrichOne('${esc(c.id || '')}','${esc(c.displayName)}','${esc(c.website || '')}')">补全</button>
+            </td>
+          </tr>`;
+        }
+        html += '</tbody></table>';
+        document.getElementById('resultsContent').innerHTML = html;
+      } catch (e) {
+        console.error('Load results failed:', e);
+      }
+    }
+
+    async function enrichOne(candidateId, name, website) {
+      window.location.href = `/enrich.html?candidateId=${encodeURIComponent(candidateId)}&name=${encodeURIComponent(name)}&domain=${encodeURIComponent(website)}`;
+    }
+
+    async function loadHistory() {
+      showStatus('加载历史记录...', 'info');
+      try {
+        const res = await fetch(`${API}/api/scan/runs?limit=10`);
+        const data = await res.json();
+        if (!data.success) return;
+
+        const runs = data.data;
+        if (runs.length === 0) {
+          showStatus('暂无历史记录', 'info');
+          return;
+        }
+
+        document.getElementById('results-section').style.display = 'block';
+        let html = '<table><thead><tr><th>时间</th><th>关键词</th><th>状态</th><th>抓取</th><th>合格</th><th>待验证</th><th>过滤</th><th>新增</th><th>操作</th></tr></thead><tbody>';
+        for (const r of runs) {
+          const keywords = JSON.parse(r.keywords || '[]').join(', ');
+          html += `<tr>
+            <td>${new Date(r.started_at).toLocaleString()}</td>
+            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${esc(keywords)}</td>
+            <td>${r.status === 'completed' ? '✅' : '❌'} ${r.status}</td>
+            <td>${r.total_fetched ?? r.total_found}</td>
+            <td>${r.total_qualified ?? 0}</td>
+            <td>${r.total_review ?? 0}</td>
+            <td>${r.total_rejected ?? 0}</td>
+            <td>${r.total_new}</td>
+            <td><button class="btn btn-secondary" style="padding:4px 12px;font-size:12px" onclick="loadResults('${r.id}')">查看</button></td>
+          </tr>`;
+        }
+        html += '</tbody></table>';
+        document.getElementById('resultsContent').innerHTML = html;
+        document.getElementById('resultCount').textContent = `(${runs.length} 次扫描)`;
+      } catch (e) {
+        showStatus(`加载失败: ${e.message}`, 'error');
+      }
+    }
+
+    function showStatus(msg, type) {
+      const bar = document.getElementById('statusBar');
+      bar.textContent = msg;
+      bar.className = `status-bar status-${type}`;
+      bar.style.display = 'block';
+    }
+
+    function esc(str) {
+      if (!str) return '';
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

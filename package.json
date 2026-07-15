@@ -1,0 +1,27 @@
+{
+  "name": "ai-lead-gen",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "AI-powered B2B lead generation: SCAN + ENRICH pipeline",
+  "scripts": {
+    "dev": "tsx src/server.ts",
+    "start": "node dist/server.js",
+    "build": "tsc",
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "verify:schema": "npm run build && node scripts/verify-schema.mjs"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "sql.js": "^1.12.0",
+    "dotenv": "^16.4.7",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "tsx": "^4.19.0",
+    "@types/express": "^5.0.0",
+    "@types/cors": "^2.8.17",
+    "@types/node": "^22.0.0"
+  }
+}

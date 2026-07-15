@@ -1,0 +1,7 @@
+{
+  "code": "google_places", "version": "1.0.0", "name": "Google Places", "status": "active", "adapterCode": "google_places",
+  "sourceType": "maps", "authority": "commercial", "countries": ["*"], "industries": ["*"],
+  "fields": ["company", "address", "coordinates", "phone", "website", "rating", "place_type"],
+  "requiresApiKey": true, "costModel": "per_request", "refreshPolicy": "live", "cachePolicy": "evidence_only", "qualityBaseline": 0.72,
+  "termsUrl": "https://cloud.google.com/maps-platform/terms"
+}

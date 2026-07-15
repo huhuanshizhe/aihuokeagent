@@ -1,0 +1,7 @@
+{
+  "code": "brave_places", "version": "1.0.0", "name": "Brave Place Search", "status": "active", "adapterCode": "brave_places",
+  "sourceType": "maps", "authority": "commercial", "countries": ["*"], "industries": ["*"],
+  "fields": ["company", "address", "coordinates", "website", "rating"],
+  "requiresApiKey": true, "costModel": "per_request", "refreshPolicy": "live", "cachePolicy": "evidence_only", "qualityBaseline": 0.58,
+  "termsUrl": "https://brave.com/search/api/"
+}

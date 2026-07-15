@@ -1,0 +1,6 @@
+{
+  "code": "ai_search", "version": "1.0.0", "name": "AI-assisted Web Search", "status": "active", "adapterCode": "ai_search",
+  "sourceType": "web_search", "authority": "open_web", "countries": ["*"], "industries": ["*"],
+  "fields": ["company", "website", "description", "source_evidence"],
+  "requiresApiKey": true, "costModel": "search_plus_model_tokens", "refreshPolicy": "live", "cachePolicy": "source_snapshot", "qualityBaseline": 0.48
+}

@@ -1,0 +1,29 @@
+{
+  "id": "market.malaysia",
+  "version": "1.0.0",
+  "status": "active",
+  "countryCode": "MY",
+  "countryName": "Malaysia",
+  "region": "southeast_asia",
+  "aliases": ["Malaysia", "马来西亚", "Malaysia"],
+  "languages": [
+    { "code": "ms", "name": "Malay", "priority": 1 },
+    { "code": "en", "name": "English", "priority": 2 },
+    { "code": "zh", "name": "Chinese", "priority": 3 }
+  ],
+  "viewport": { "low": { "latitude": 0.85, "longitude": 99.64 }, "high": { "latitude": 7.4, "longitude": 119.27 } },
+  "clusters": [
+    { "id": "my.kl_selangor", "name": "Kuala Lumpur and Selangor", "localName": "Kuala Lumpur Selangor", "tags": ["services", "healthcare"], "viewport": { "low": { "latitude": 2.75, "longitude": 100.8 }, "high": { "latitude": 3.65, "longitude": 102.0 } } },
+    { "id": "my.penang", "name": "Penang", "localName": "Pulau Pinang", "tags": ["services", "manufacturing"], "viewport": { "low": { "latitude": 5.1, "longitude": 100.05 }, "high": { "latitude": 5.65, "longitude": 100.6 } } },
+    { "id": "my.johor", "name": "Johor Bahru", "localName": "Johor Bahru", "tags": ["services", "logistics"], "viewport": { "low": { "latitude": 1.25, "longitude": 103.45 }, "high": { "latitude": 1.85, "longitude": 104.15 } } },
+    { "id": "my.ipoh", "name": "Ipoh", "localName": "Ipoh", "tags": ["services"], "viewport": { "low": { "latitude": 4.35, "longitude": 100.85 }, "high": { "latitude": 4.85, "longitude": 101.35 } } }
+  ],
+  "localization": { "phrases": [
+    { "pattern": "pet hospital", "value": "hospital haiwan", "language": "ms" },
+    { "pattern": "veterinary clinic", "value": "klinik veterinar", "language": "ms" },
+    { "pattern": "animal clinic", "value": "klinik haiwan", "language": "ms" },
+    { "pattern": "veterinarian", "value": "doktor veterinar", "language": "ms" }
+  ] },
+  "sourceCodes": ["google_places", "brave_places", "ai_search", "my_veterinary_directory"],
+  "updatedAt": "2026-07-15"
+}

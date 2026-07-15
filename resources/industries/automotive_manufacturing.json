@@ -1,0 +1,17 @@
+{
+  "id": "automotive_manufacturing",
+  "version": "1.0.0",
+  "status": "active",
+  "name": "Automotive Manufacturing",
+  "aliases": ["automotive", "auto parts", "vehicle parts", "汽车零部件", "汽车制造", "ยานยนต์"],
+  "entityType": "manufacturer",
+  "keywords": ["automotive parts manufacturer", "vehicle component factory", "automotive painting factory"],
+  "negativeKeywords": ["car wash", "detailing", "repair shop", "used car", "consumer paint store"],
+  "localTerms": {
+    "TH": ["ผู้ผลิตชิ้นส่วนยานยนต์", "โรงงานผลิตชิ้นส่วนรถยนต์", "โรงงานพ่นสีรถยนต์"],
+    "VN": ["nhà sản xuất phụ tùng ô tô", "nhà máy linh kiện ô tô"]
+  },
+  "sourceTypes": ["government_registry", "maps", "industry_directory", "web_search"],
+  "qualificationSignals": ["factory registration", "automotive component activity", "industrial estate address", "official website"],
+  "updatedAt": "2026-07-15"
+}

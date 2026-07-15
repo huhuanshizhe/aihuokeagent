@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 获客 - 情报补全</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px 0; margin-bottom: 24px; }
+    header .container { display: flex; justify-content: space-between; align-items: center; }
+    header h1 { font-size: 24px; font-weight: 600; }
+    nav a { color: white; text-decoration: none; margin-left: 20px; opacity: 0.9; }
+    nav a:hover { opacity: 1; }
+    .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .card h2 { font-size: 18px; margin-bottom: 16px; color: #444; }
+    .form-row { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+    .form-group { flex: 1; min-width: 200px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: #666; }
+    .form-group input, .form-group select { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; }
+    .btn { padding: 10px 24px; border: none; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+    .btn-primary { background: #667eea; color: white; }
+    .btn-primary:hover { background: #5a6fd6; }
+    .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
+    .btn-secondary { background: #f0f0f0; color: #333; }
+    .status-bar { padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; }
+    .status-info { background: #e3f2fd; color: #1565c0; }
+    .status-success { background: #e8f5e9; color: #2e7d32; }
+    .status-error { background: #ffebee; color: #c62828; }
+    .result-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 16px; }
+    .result-card { border: 1px solid #eee; border-radius: 10px; padding: 16px; }
+    .result-card h3 { font-size: 16px; margin-bottom: 8px; color: #333; }
+    .result-card .field { margin-bottom: 8px; font-size: 13px; }
+    .result-card .field-label { color: #999; font-weight: 500; }
+    .result-card .field-value { color: #333; }
+    .result-card a { color: #667eea; text-decoration: none; }
+    .result-card a:hover { text-decoration: underline; }
+    .dm-list { margin-top: 8px; }
+    .dm-item { padding: 8px; background: #fafafa; border-radius: 6px; margin-bottom: 6px; font-size: 13px; }
+    .confidence { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+    .conf-high { background: #e8f5e9; color: #2e7d32; }
+    .conf-mid { background: #fff3e0; color: #ef6c00; }
+    .conf-low { background: #fafafa; color: #999; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; font-size: 13px; }
+    th { font-weight: 600; color: #666; background: #fafafa; }
+    #results-section { display: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <h1>🔍 AI 获客系统</h1>
+      <nav>
+        <a href="/">扫描</a>
+        <a href="/enrich.html">补全</a>
+        <a href="/pipeline.html">全流程</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- 补全配置 -->
+    <div class="card">
+      <h2>🧠 情报补全</h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label>公司名称</label>
+          <input type="text" id="companyName" placeholder="例：Acme Corporation">
+        </div>
+        <div class="form-group">
+          <label>域名（可选）</label>
+          <input type="text" id="domain" placeholder="例：acme.com">
+        </div>
+        <div class="form-group">
+          <label>国家（可选）</label>
+          <input type="text" id="country" placeholder="例：Thailand">
+        </div>
+        <div class="form-group">
+          <label>补全深度</label>
+          <select id="depth">
+            <option value="standard" selected>标准：官网与联系方式（推荐）</option>
+            <option value="deep">深度：增加 AI 画像与决策人</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-top:16px">
+        <button class="btn btn-primary" id="enrichBtn" onclick="startEnrich()">🔎 开始补全</button>
+        <button class="btn btn-secondary" onclick="loadAll()" style="margin-left:8px">📜 所有记录</button>
+      </div>
+    </div>
+
+    <!-- 状态 -->
+    <div id="statusBar" class="status-bar status-info" style="display:none"></div>
+
+    <!-- 结果 -->
+    <div id="results-section" class="card">
+      <h2>📊 补全结果</h2>
+      <div id="resultsContent"></div>
+    </div>
+  </div>
+
+  <script>
+    const API = '';
+
+    // 从 URL 参数预填
+    const params = new URLSearchParams(window.location.search);
+    const candidateId = params.get('candidateId');
+    if (params.get('name')) document.getElementById('companyName').value = params.get('name');
+    if (params.get('domain')) document.getElementById('domain').value = params.get('domain');
+
+    async function startEnrich() {
+      const btn = document.getElementById('enrichBtn');
+      btn.disabled = true;
+      btn.textContent = '⏳ 补全中...';
+      showStatus('正在执行情报补全...', 'info');
+
+      const body = {
+        companyName: document.getElementById('companyName').value.trim(),
+        domain: document.getElementById('domain').value.trim() || undefined,
+        country: document.getElementById('country').value.trim() || undefined,
+        depth: document.getElementById('depth').value,
+      };
+
+      if (candidateId) {
+        body.candidateIds = [candidateId];
+        delete body.companyName;
+        delete body.domain;
+        delete body.country;
+      }
+
+      if (!body.companyName && !body.candidateIds?.length) {
+        showStatus('请输入公司名称', 'error');
+        btn.disabled = false;
+        btn.textContent = '🔎 开始补全';
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API}/api/enrich`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          showStatus('✅ 补全完成！', 'success');
+          renderResults(data.data);
+        } else {
+          showStatus(`❌ 补全失败: ${data.error}`, 'error');
+        }
+      } catch (e) {
+        showStatus(`❌ 请求失败: ${e.message}`, 'error');
+      }
+
+      btn.disabled = false;
+      btn.textContent = '🔎 开始补全';
+    }
+
+    function renderResults(results) {
+      document.getElementById('results-section').style.display = 'block';
+      if (!results || results.length === 0) {
+        document.getElementById('resultsContent').innerHTML = '<p style="color:#999">无结果</p>';
+        return;
+      }
+
+      let html = '<div class="result-grid">';
+      for (const r of results) {
+        const confClass = r.confidenceScore >= 0.6 ? 'conf-high' : r.confidenceScore >= 0.3 ? 'conf-mid' : 'conf-low';
+        const conf = ((r.confidenceScore || 0) * 100).toFixed(0);
+
+        html += `<div class="result-card">
+          <h3>${esc(r.companyName)} <span class="confidence ${confClass}">${conf}%</span></h3>
+          ${r.website ? `<div class="field"><span class="field-label">🌐 网站:</span> <a href="${esc(r.website)}" target="_blank">${esc(r.website)}</a></div>` : ''}
+          ${r.linkedInUrl ? `<div class="field"><span class="field-label">💼 LinkedIn:</span> <a href="${esc(r.linkedInUrl)}" target="_blank">查看</a></div>` : ''}
+          ${r.emails?.length ? `<div class="field"><span class="field-label">📧 邮箱:</span> <span class="field-value">${r.emails.map(esc).join(', ')}</span></div>` : ''}
+          ${r.phones?.length ? `<div class="field"><span class="field-label">📞 电话:</span> <span class="field-value">${r.phones.map(esc).join(', ')}</span></div>` : ''}
+          <div class="field"><span class="field-label">建议触达:</span> <span class="field-value">${esc(r.recommendedChannel || 'research')}</span></div>
+          ${r.informationGaps?.length ? `<div class="field"><span class="field-label">待补字段:</span> <span class="field-value">${r.informationGaps.map(esc).join(', ')}</span></div>` : ''}
+          ${r.conflicts?.length ? `<div class="field" style="color:#ef6c00"><span class="field-label">字段冲突:</span> ${r.conflicts.map(c => `${esc(c.field)} → ${esc(c.resolvedValue)}`).join('; ')}</div>` : ''}
+          ${r.fieldEvidence?.length ? `<div class="field"><span class="field-label">证据:</span> <span class="field-value">${r.fieldEvidence.length} 条，来自 ${[...new Set(r.fieldEvidence.map(e => e.source))].map(esc).join(', ')}</span></div>` : ''}
+          ${r.description ? `<div class="field"><span class="field-label">📝 简介:</span> <span class="field-value">${esc(r.description.slice(0, 200))}</span></div>` : ''}
+          ${r.decisionMakers?.length ? `
+            <div class="field"><span class="field-label">👤 决策人:</span></div>
+            <div class="dm-list">${r.decisionMakers.map(dm => `
+              <div class="dm-item">
+                <strong>${esc(dm.name)}</strong> - ${esc(dm.title)}
+                ${dm.email ? `<br>📧 ${esc(dm.email)}` : ''}
+                ${dm.linkedIn ? `<br>💼 <a href="${esc(dm.linkedIn)}" target="_blank">LinkedIn</a>` : ''}
+              </div>
+            `).join('')}</div>
+          ` : ''}
+          ${r.errors?.length ? `<div class="field" style="color:#c62828"><span class="field-label">⚠️ 错误:</span> ${r.errors.map(esc).join('; ')}</div>` : ''}
+        </div>`;
+      }
+      html += '</div>';
+      document.getElementById('resultsContent').innerHTML = html;
+    }
+
+    async function loadAll() {
+      showStatus('加载记录...', 'info');
+      try {
+        const res = await fetch(`${API}/api/enrich/results?limit=20`);
+        const data = await res.json();
+        if (!data.success) return;
+
+        const records = data.data;
+        document.getElementById('results-section').style.display = 'block';
+
+        if (records.length === 0) {
+          document.getElementById('resultsContent').innerHTML = '<p style="color:#999">暂无记录</p>';
+          return;
+        }
+
+        let html = '<table><thead><tr><th>公司</th><th>域名</th><th>状态</th><th>置信度</th><th>邮箱</th><th>决策人</th><th>时间</th></tr></thead><tbody>';
+        for (const r of records) {
+          const emails = r.emails ? JSON.parse(r.emails) : [];
+          const dms = r.decision_makers ? JSON.parse(r.decision_makers) : [];
+          const conf = ((r.confidence_score || 0) * 100).toFixed(0);
+          const confClass = r.confidence_score >= 0.6 ? 'conf-high' : r.confidence_score >= 0.3 ? 'conf-mid' : 'conf-low';
+          html += `<tr>
+            <td><strong>${esc(r.company_name)}</strong></td>
+            <td>${esc(r.domain || '-')}</td>
+            <td>${r.enrichment_status}</td>
+            <td><span class="confidence ${confClass}">${conf}%</span></td>
+            <td>${emails.length || 0}</td>
+            <td>${dms.length || 0}</td>
+            <td>${new Date(r.created_at).toLocaleString()}</td>
+          </tr>`;
+        }
+        html += '</tbody></table>';
+        document.getElementById('resultsContent').innerHTML = html;
+        showStatus(`已加载 ${records.length} 条记录`, 'info');
+      } catch (e) {
+        showStatus(`加载失败: ${e.message}`, 'error');
+      }
+    }
+
+    function showStatus(msg, type) {
+      const bar = document.getElementById('statusBar');
+      bar.textContent = msg;
+      bar.className = `status-bar status-${type}`;
+      bar.style.display = 'block';
+    }
+
+    function esc(str) {
+      if (!str) return '';
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

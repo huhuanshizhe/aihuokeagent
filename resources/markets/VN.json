@@ -1,0 +1,29 @@
+{
+  "id": "market.vietnam",
+  "version": "1.0.0",
+  "status": "active",
+  "countryCode": "VN",
+  "countryName": "Vietnam",
+  "region": "southeast_asia",
+  "aliases": ["Vietnam", "越南", "Việt Nam"],
+  "languages": [{ "code": "vi", "name": "Vietnamese", "priority": 1 }, { "code": "en", "name": "English", "priority": 2 }],
+  "viewport": { "low": { "latitude": 8.18, "longitude": 102.14 }, "high": { "latitude": 23.4, "longitude": 109.47 } },
+  "clusters": [
+    { "id": "vn.hcmc", "name": "Ho Chi Minh City", "localName": "Thành phố Hồ Chí Minh", "viewport": { "low": { "latitude": 10.35, "longitude": 106.35 }, "high": { "latitude": 11.2, "longitude": 107.05 } } },
+    { "id": "vn.binh_duong", "name": "Binh Duong", "localName": "Bình Dương", "viewport": { "low": { "latitude": 10.75, "longitude": 106.35 }, "high": { "latitude": 11.55, "longitude": 106.95 } } },
+    { "id": "vn.dong_nai", "name": "Dong Nai", "localName": "Đồng Nai", "viewport": { "low": { "latitude": 10.5, "longitude": 106.75 }, "high": { "latitude": 11.6, "longitude": 107.6 } } },
+    { "id": "vn.hanoi", "name": "Hanoi", "localName": "Hà Nội", "viewport": { "low": { "latitude": 20.55, "longitude": 105.25 }, "high": { "latitude": 21.4, "longitude": 106.15 } } },
+    { "id": "vn.bac_ninh", "name": "Bac Ninh", "localName": "Bắc Ninh", "viewport": { "low": { "latitude": 20.95, "longitude": 105.85 }, "high": { "latitude": 21.3, "longitude": 106.35 } } },
+    { "id": "vn.hai_phong", "name": "Hai Phong", "localName": "Hải Phòng", "viewport": { "low": { "latitude": 20.45, "longitude": 106.3 }, "high": { "latitude": 21.05, "longitude": 107.15 } } }
+  ],
+  "localization": { "phrases": [
+    { "pattern": "automotive paint(?:ing)? booth", "value": "buồng sơn ô tô", "language": "vi" },
+    { "pattern": "robotic paint(?:ing)? system", "value": "hệ thống sơn robot", "language": "vi" },
+    { "pattern": "automatic paint(?:ing)? system", "value": "hệ thống sơn tự động", "language": "vi" },
+    { "pattern": "paint(?:ing)? robot", "value": "robot phun sơn", "language": "vi" },
+    { "pattern": "automotive parts? manufacturer", "value": "nhà sản xuất phụ tùng ô tô", "language": "vi" },
+    { "pattern": "factory automation", "value": "tự động hóa nhà máy", "language": "vi" }
+  ] },
+  "sourceCodes": ["google_places", "brave_places", "ai_search"],
+  "updatedAt": "2026-07-15"
+}

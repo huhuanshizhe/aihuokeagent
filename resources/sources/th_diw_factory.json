@@ -1,0 +1,7 @@
+{
+  "code": "th_diw_factory", "version": "1.0.0", "name": "Thailand DIW Factory Registry", "status": "active", "adapterCode": "thailand_factory",
+  "sourceType": "government_registry", "authority": "official", "countries": ["TH"], "industries": ["automotive_manufacturing"],
+  "fields": ["factory_registration", "company", "activity", "address", "province", "isic", "workers", "coordinates", "updated_at"],
+  "requiresApiKey": false, "costModel": "free", "refreshPolicy": "monthly", "cachePolicy": "local_full_snapshot", "qualityBaseline": 0.9,
+  "termsUrl": "https://openapi.industry.go.th/gdcatalog/"
+}

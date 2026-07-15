@@ -1,0 +1,39 @@
+{
+  "id": "market.thailand",
+  "version": "1.0.0",
+  "status": "active",
+  "countryCode": "TH",
+  "countryName": "Thailand",
+  "region": "southeast_asia",
+  "aliases": ["Thailand", "泰国", "ประเทศไทย"],
+  "languages": [
+    { "code": "th", "name": "Thai", "priority": 1 },
+    { "code": "en", "name": "English", "priority": 2 }
+  ],
+  "viewport": { "low": { "latitude": 5.61, "longitude": 97.34 }, "high": { "latitude": 20.47, "longitude": 105.64 } },
+  "clusters": [
+    { "id": "th.chonburi", "name": "Chonburi", "localName": "ชลบุรี", "tags": ["automotive", "manufacturing"], "viewport": { "low": { "latitude": 12.75, "longitude": 100.7 }, "high": { "latitude": 13.65, "longitude": 101.65 } } },
+    { "id": "th.rayong", "name": "Rayong", "localName": "ระยอง", "tags": ["automotive", "petrochemical"], "viewport": { "low": { "latitude": 12.45, "longitude": 100.85 }, "high": { "latitude": 13.25, "longitude": 101.85 } } },
+    { "id": "th.samut_prakan", "name": "Samut Prakan", "localName": "สมุทรปราการ", "tags": ["manufacturing", "logistics"], "viewport": { "low": { "latitude": 13.45, "longitude": 100.42 }, "high": { "latitude": 13.85, "longitude": 100.98 } } },
+    { "id": "th.chachoengsao", "name": "Chachoengsao", "localName": "ฉะเชิงเทรา", "tags": ["automotive", "manufacturing"], "viewport": { "low": { "latitude": 13.25, "longitude": 100.75 }, "high": { "latitude": 14.05, "longitude": 101.85 } } },
+    { "id": "th.ayutthaya", "name": "Ayutthaya", "localName": "พระนครศรีอยุธยา", "tags": ["electronics", "manufacturing"], "viewport": { "low": { "latitude": 14.05, "longitude": 100.15 }, "high": { "latitude": 14.75, "longitude": 100.95 } } },
+    { "id": "th.pathum_thani", "name": "Pathum Thani", "localName": "ปทุมธานี", "tags": ["technology", "manufacturing"], "viewport": { "low": { "latitude": 13.8, "longitude": 100.2 }, "high": { "latitude": 14.35, "longitude": 100.95 } } }
+  ],
+  "localization": {
+    "phrases": [
+      { "pattern": "automotive paint(?:ing)? booth", "value": "ห้องพ่นสีรถยนต์", "language": "th" },
+      { "pattern": "robotic paint(?:ing)? system", "value": "ระบบพ่นสีด้วยหุ่นยนต์", "language": "th" },
+      { "pattern": "automatic paint(?:ing)? system", "value": "ระบบพ่นสีอัตโนมัติ", "language": "th" },
+      { "pattern": "paint(?:ing)? robot", "value": "หุ่นยนต์พ่นสี", "language": "th" },
+      { "pattern": "paint(?:ing)? cell", "value": "เซลล์พ่นสีอัตโนมัติ", "language": "th" },
+      { "pattern": "industrial coating system", "value": "ระบบเคลือบผิวอุตสาหกรรม", "language": "th" },
+      { "pattern": "automotive parts? manufacturer", "value": "ผู้ผลิตชิ้นส่วนยานยนต์", "language": "th" },
+      { "pattern": "auto parts? manufacturer", "value": "โรงงานผลิตชิ้นส่วนรถยนต์", "language": "th" },
+      { "pattern": "factory automation", "value": "ระบบอัตโนมัติในโรงงาน", "language": "th" },
+      { "pattern": "system integrator", "value": "ผู้รับเหมาระบบอุตสาหกรรม", "language": "th" },
+      { "pattern": "paint booth", "value": "ห้องพ่นสี", "language": "th" }
+    ]
+  },
+  "sourceCodes": ["th_diw_factory", "google_places", "brave_places", "ai_search"],
+  "updatedAt": "2026-07-15"
+}
