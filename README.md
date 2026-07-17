@@ -8,7 +8,7 @@ Enrichment MVP acceptance evidence and its production backlog are recorded in [d
 
 Docker deployment, API authentication, and offline-client examples are documented in [docs/deployment.md](docs/deployment.md).
 
-`npm run dev` intentionally runs a single process without hot reload. The local `sql.js` database is a whole-file, single-writer store; overlapping watch-reload processes can overwrite a newer snapshot. Restart the development server explicitly after code changes.
+`npm run dev` 连接 Neon PostgreSQL（`DATABASE_URL`）。首次启动前请执行 `npm run db:push` 同步表结构。
 
 独立的 B2B AI 获客引擎。它从 VertaX 主项目的获客雷达能力中抽离，目标是形成可独立部署、可被 VertaX 或其他软件调用的多租户 API 服务。
 
@@ -31,7 +31,7 @@ Docker deployment, API authentication, and offline-client examples are documente
 当前原型已具备：
 
 - Express + TypeScript 服务入口
-- SQLite 本地持久化
+- Neon PostgreSQL + Drizzle ORM 持久化
 - `SCAN -> ENRICH` 同步流程
 - Google Places、AI Search、Apollo、Hunter 等数据源适配器
 - Exa、Firecrawl 和 AI 辅助补全
@@ -65,7 +65,6 @@ Docker deployment, API authentication, and offline-client examples are documente
 - 无统一请求校验、错误码和版本化响应协议
 - 扫描与补全在 HTTP 请求内同步执行，长任务不可靠
 - 缺少任务状态、重试、幂等和取消机制
-- SQLite/sql.js 不适合多实例生产部署
 - 缺少配额、限流、成本统计和审计日志
 - 缺少 OpenAPI 文档、Webhook 签名和 SDK 友好的契约
 - 与 VertaX 主项目中的 Radar/Prospect 数据模型存在重复
@@ -135,9 +134,10 @@ POST /api/public/scan
 - 适配器：固定自动规划（与调试 UI「自动规划数据源」一致）
 - `maxResults`：固定为 20（调用方不可改）
 - 鉴权：与其它业务 API 相同；配置了 `SERVICE_API_KEY` 时需 `Authorization: Bearer <key>` 或 `X-Api-Key`
-- 成功响应：`{ "success": true, "data": { runId, duration, totalFetched, totalFound, totalNew, totalQualified, totalReview, totalRejected, errors, warnings } }`
-- 企业列表请立刻再调：`GET /api/scan/results?runId=...`（扫描是**同步**完成的，返回时结果已落库，**不需要轮询**）
-- 不再返回 `resourcePlan` / `adapterResults` / `rejectedSamples` / `reviewSamples` 等调试字段
+- 成功响应一次返回：`{ "success": true, "data": { runId, duration, totalFetched, totalFound, totalNew, totalQualified, totalReview, totalRejected, errors, warnings, candidates } }`
+- **无需**再调 `GET /api/scan/results`；普通 `POST /api/scan` 同样直接带 `candidates`
+- `GET /api/scan/results?runId=` 仅用于回看历史（如调试页「历史记录」）
+- 公开接口不返回 `resourcePlan` / `adapterResults` / samples 等调试字段
 
 本地测试页：`http://localhost:3100/public-scan.html`（顶栏「公开 API」）。
 

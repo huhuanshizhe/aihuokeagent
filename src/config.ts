@@ -15,6 +15,7 @@ dotenv.config({ path: join(__dirname, '..', '.env') });
 
 export interface AppConfig {
   port: number;
+  databaseUrl: string;
   service: {
     apiKey: string;
     corsOrigins: string[];
@@ -43,6 +44,7 @@ function env(key: string, fallback = ''): string {
 
 export const config: AppConfig = {
   port: parseInt(env('PORT', '3100'), 10),
+  databaseUrl: env('DATABASE_URL'),
   service: {
     apiKey: env('SERVICE_API_KEY'),
     corsOrigins: env('CORS_ORIGINS').split(',').map(value => value.trim()).filter(Boolean),

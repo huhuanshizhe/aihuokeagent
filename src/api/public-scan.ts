@@ -1,13 +1,11 @@
 /**
- * Public scan API for external clients (e.g. vertax-local).
+ * Public scan API.
  * POST /api/public/scan — single keyword + country; auto adapters; maxResults=20.
- *
- * Response is a slim summary. Fetch companies via GET /api/scan/results?runId=...
- * immediately after success (scan is synchronous; no polling).
+ * One request returns summary + candidates (no follow-up GET required).
  */
 
 import { Router } from 'express';
-import { runScan } from '../scan/scanner.js';
+import { getScanResults, runScan } from '../scan/scanner.js';
 import {
   parsePublicScanRequest,
   publicScanToScanOptions,
@@ -27,6 +25,7 @@ publicScanRouter.post('/', async (req, res) => {
       maxResults: parsed.maxResults,
     }));
     const result = await runScan(options);
+    const candidates = await getScanResults(result.runId);
     res.json({
       success: true,
       data: {
@@ -40,6 +39,7 @@ publicScanRouter.post('/', async (req, res) => {
         totalRejected: result.totalRejected,
         errors: result.errors,
         warnings: result.warnings,
+        candidates,
       },
     });
   } catch (error) {

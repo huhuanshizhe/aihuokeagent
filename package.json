@@ -8,20 +8,25 @@
     "dev": "tsx src/server.ts",
     "start": "node dist/server.js",
     "build": "tsc",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
     "test": "npm run build && node --test dist/test/*.test.js",
     "verify:schema": "npm run build && node scripts/verify-schema.mjs"
   },
   "dependencies": {
-    "express": "^4.21.0",
-    "sql.js": "^1.12.0",
+    "cors": "^2.8.5",
     "dotenv": "^16.4.7",
-    "cors": "^2.8.5"
+    "drizzle-orm": "^0.45.2",
+    "express": "^4.21.0",
+    "pg": "^8.22.0"
   },
   "devDependencies": {
-    "typescript": "^5.7.0",
-    "tsx": "^4.19.0",
-    "@types/express": "^5.0.0",
     "@types/cors": "^2.8.17",
-    "@types/node": "^22.0.0"
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.20.0",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
   }
 }

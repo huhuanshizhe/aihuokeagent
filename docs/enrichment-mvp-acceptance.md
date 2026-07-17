@@ -11,7 +11,7 @@ Accepted: 2026-07-15
 - Field-level provenance, confidence, conflict resolution, information gaps, and recommended channel.
 - Candidate write-back for verified website and resulting CRM/contact fields.
 - Explicit disk flush before successful scan or enrichment responses.
-- Single-process local development to protect the whole-file `sql.js` store.
+- Single-process local development against Neon PostgreSQL (`DATABASE_URL`).
 
 ## Verification evidence
 

@@ -1,9 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "express",
-  "functions": {
-    "src/server.ts": {
-      "includeFiles": "node_modules/sql.js/dist/sql-wasm.wasm"
-    }
-  }
+  "framework": "express"
 }

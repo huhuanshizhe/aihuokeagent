@@ -4,7 +4,7 @@ Pushing this directory to Git distributes the source code. A callable API additi
 
 ## Required production architecture
 
-- One application replica only while the service uses the local `sql.js` whole-file database.
+- Neon PostgreSQL via Drizzle; set `DATABASE_URL` before starting the service.
 - A persistent volume mounted at `/app/data`.
 - HTTPS termination at the hosting platform or reverse proxy.
 - `SERVICE_API_KEY` set to a long random secret.
@@ -88,4 +88,4 @@ See `.env.example` for the full list.
 
 ## Hosting choice
 
-A Docker-capable VPS or a platform with persistent volumes is the safest current target. Do not deploy multiple replicas against the same `sql.js` file. Before multi-tenant horizontal scaling, migrate persistence to PostgreSQL and move deep enrichment to a durable job queue.
+A Docker-capable VPS or serverless host with Neon is the current target. Multi-replica deployment is fine against shared Postgres. Deep enrichment should still move to a durable job queue before high concurrency production use.

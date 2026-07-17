@@ -75,9 +75,8 @@
         </span>
       </div>
       <p class="hint">
-        客户端流程（同步，不轮询）：① <code>POST /api/public/scan</code> 拿到 <code>runId</code> 与摘要 →
-        ② 立刻 <code>GET /api/scan/results?runId=...</code> 拉企业列表。
-        适配器固定自动规划，每适配器最大结果数固定为 20。若配置了 <code>SERVICE_API_KEY</code>，两步请求都需带 Bearer / X-Api-Key。
+        一次请求完成：<code>POST /api/public/scan</code> 同步扫描并直接返回摘要 + <code>candidates</code> 企业列表（无需再调 results）。
+        适配器固定自动规划，每适配器最大结果数固定为 20。若配置了 <code>SERVICE_API_KEY</code>，请求需带 Bearer / X-Api-Key。
       </p>
       <div class="form-row">
         <div class="form-group">
@@ -197,7 +196,7 @@
 
       btn.disabled = true;
       btn.textContent = '⏳ 扫描中...';
-      showStatus('① 正在调用 POST /api/public/scan（同步等待扫描完成）...', 'info');
+      showStatus('正在调用 POST /api/public/scan（一次返回企业列表）...', 'info');
       document.getElementById('results-section').style.display = 'none';
 
       try {
@@ -220,16 +219,14 @@
 
         if (data.success) {
           const r = data.data;
+          const candidates = r.candidates || [];
           showStatus(
-            `① 扫描完成 runId=${r.runId}：抓取 ${r.totalFetched ?? r.totalFound}，合格 ${r.totalQualified ?? 0}，待验证 ${r.totalReview ?? 0}，过滤 ${r.totalRejected ?? 0}，新增 ${r.totalNew ?? 0}，耗时 ${((r.duration || 0) / 1000).toFixed(1)}s。② 立即拉取结果…`,
-            'info',
+            `✅ 扫描完成：抓取 ${r.totalFetched ?? r.totalFound}，合格 ${r.totalQualified ?? 0}，待验证 ${r.totalReview ?? 0}，过滤 ${r.totalRejected ?? 0}，企业 ${candidates.length} 家，耗时 ${((r.duration || 0) / 1000).toFixed(1)}s`,
+            'success',
           );
-          if (r.errors?.length) {
-            showStatus(`⚠️ 部分错误: ${r.errors.join('; ')}`, 'error');
-          } else if (r.warnings?.length) {
-            showStatus(`⚠️ Provider 警告: ${r.warnings.join('; ')}`, 'error');
-          }
-          await loadResults(r.runId);
+          if (r.errors?.length) showStatus(`⚠️ 部分错误: ${r.errors.join('; ')}`, 'error');
+          else if (r.warnings?.length) showStatus(`⚠️ Provider 警告: ${r.warnings.join('; ')}`, 'error');
+          renderCandidates(candidates);
         } else {
           const detail = data.details?.length ? `（${data.details.join('; ')}）` : '';
           showStatus(`❌ 失败 (${res.status}): ${data.error || 'unknown'}${detail}`, 'error');
@@ -242,50 +239,34 @@
       btn.textContent = '🚀 调用公开扫描';
     }
 
-    async function loadResults(runId) {
-      try {
-        const res = await fetch(`${API}/api/scan/results?runId=${encodeURIComponent(runId)}`, {
-          headers: authHeaders(),
-        });
-        const data = await res.json();
-        if (!data.success) {
-          showStatus(`❌ 拉取结果失败: ${data.error || 'unknown'}`, 'error');
-          return;
-        }
+    function renderCandidates(candidates) {
+      document.getElementById('resultCount').textContent = `(${candidates.length} 个)`;
+      document.getElementById('results-section').style.display = 'block';
 
-        const candidates = data.data.candidates || [];
-        document.getElementById('resultCount').textContent = `(${candidates.length} 个)`;
-        document.getElementById('results-section').style.display = 'block';
-        showStatus(`② 已拉取企业列表：${candidates.length} 家（runId=${runId}）`, 'success');
-
-        if (candidates.length === 0) {
-          document.getElementById('resultsContent').innerHTML = '<div class="loading">未发现企业</div>';
-          return;
-        }
-
-        let html = '<table><thead><tr><th>企业名</th><th>国家</th><th>行业</th><th>网站</th><th>资格</th><th>评分</th></tr></thead><tbody>';
-        for (const c of candidates) {
-          const scoreClass = c.matchScore >= 0.7 ? 'score-high' : c.matchScore >= 0.4 ? 'score-mid' : 'score-low';
-          const score = c.matchScore ? (c.matchScore * 100).toFixed(0) : '-';
-          let host = '-';
-          if (c.website) {
-            try { host = new URL(c.website).hostname; } catch { host = c.website; }
-          }
-          html += `<tr>
-            <td><strong>${esc(c.displayName)}</strong></td>
-            <td>${esc(c.country || '-')}</td>
-            <td>${esc(c.industry || '-')}</td>
-            <td>${c.website ? `<a href="${esc(c.website)}" target="_blank" rel="noopener">${esc(host)}</a>` : '-'}</td>
-            <td>${c.qualificationTier === 'qualified' ? '✅ 合格' : c.qualificationTier === 'review' ? '🟡 待验证' : '—'}</td>
-            <td><span class="score ${scoreClass}">${score}</span></td>
-          </tr>`;
-        }
-        html += '</tbody></table>';
-        document.getElementById('resultsContent').innerHTML = html;
-      } catch (e) {
-        showStatus(`❌ 拉取结果失败: ${e.message}`, 'error');
-        console.error('Load results failed:', e);
+      if (candidates.length === 0) {
+        document.getElementById('resultsContent').innerHTML = '<div class="loading">未发现企业</div>';
+        return;
       }
+
+      let html = '<table><thead><tr><th>企业名</th><th>国家</th><th>行业</th><th>网站</th><th>资格</th><th>评分</th></tr></thead><tbody>';
+      for (const c of candidates) {
+        const scoreClass = c.matchScore >= 0.7 ? 'score-high' : c.matchScore >= 0.4 ? 'score-mid' : 'score-low';
+        const score = c.matchScore ? (c.matchScore * 100).toFixed(0) : '-';
+        let host = '-';
+        if (c.website) {
+          try { host = new URL(c.website).hostname; } catch { host = c.website; }
+        }
+        html += `<tr>
+          <td><strong>${esc(c.displayName)}</strong></td>
+          <td>${esc(c.country || '-')}</td>
+          <td>${esc(c.industry || '-')}</td>
+          <td>${c.website ? `<a href="${esc(c.website)}" target="_blank" rel="noopener">${esc(host)}</a>` : '-'}</td>
+          <td>${c.qualificationTier === 'qualified' ? '✅ 合格' : c.qualificationTier === 'review' ? '🟡 待验证' : '—'}</td>
+          <td><span class="score ${scoreClass}">${score}</span></td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+      document.getElementById('resultsContent').innerHTML = html;
     }
   </script>
 </body>

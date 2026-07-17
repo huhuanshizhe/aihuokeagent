@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { normalizeCountryCode } from '../lib/country-utils.js';
 import { resourceRegistry } from '../resources/registry.js';
 import { buildDiscoveryResourcePlan } from '../resources/planner.js';
-import { applyHistoricalPerformance, getSourceQualityMetrics } from '../resources/metrics.js';
+import { applyHistoricalPerformanceAsync, getSourceQualityMetrics } from '../resources/metrics.js';
 
 export const resourcesRouter: Router = Router();
 
@@ -15,10 +15,10 @@ resourcesRouter.get('/', (_req, res) => {
   } });
 });
 
-resourcesRouter.post('/plan', (req, res) => {
+resourcesRouter.post('/plan', async (req, res) => {
   try {
     const strings = (value: unknown): string[] => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
-    const plan = applyHistoricalPerformance(buildDiscoveryResourcePlan({
+    const plan = await applyHistoricalPerformanceAsync(buildDiscoveryResourcePlan({
       countries: strings(req.body.countries),
       industry: typeof req.body.industry === 'string' ? req.body.industry : undefined,
       keywords: strings(req.body.keywords),
@@ -30,10 +30,11 @@ resourcesRouter.post('/plan', (req, res) => {
   }
 });
 
-resourcesRouter.get('/metrics', (req, res) => {
+resourcesRouter.get('/metrics', async (req, res) => {
   const countryCode = typeof req.query.country === 'string' ? normalizeCountryCode(req.query.country) || undefined : undefined;
   const industryPackId = typeof req.query.industry === 'string' ? req.query.industry : undefined;
-  res.json({ success: true, data: getSourceQualityMetrics({ countryCode, industryPackId }) });
+  const data = await getSourceQualityMetrics({ countryCode, industryPackId });
+  res.json({ success: true, data });
 });
 
 resourcesRouter.post('/reload', (_req, res) => {

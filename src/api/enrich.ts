@@ -80,12 +80,12 @@ enrichRouter.post('/', async (req, res) => {
 });
 
 // GET /api/enrich/results?enrichmentId=xxx - 查询单个补全结果
-enrichRouter.get('/results', (req, res) => {
+enrichRouter.get('/results', async (req, res) => {
   try {
     const { enrichmentId, candidateId, limit } = req.query;
 
     if (enrichmentId) {
-      const result = getEnrichment(enrichmentId as string);
+      const result = await getEnrichment(enrichmentId as string);
       if (!result) {
         res.status(404).json({ success: false, error: 'Enrichment not found' });
         return;
@@ -95,13 +95,13 @@ enrichRouter.get('/results', (req, res) => {
     }
 
     if (candidateId) {
-      const results = getEnrichmentsByCandidate(candidateId as string);
+      const results = await getEnrichmentsByCandidate(candidateId as string);
       res.json({ success: true, data: results });
       return;
     }
 
     // 列出所有
-    const allResults = listEnrichments(parseInt(limit as string, 10) || 50);
+    const allResults = await listEnrichments(parseInt(limit as string, 10) || 50);
     res.json({ success: true, data: allResults });
   } catch (error) {
     console.error('[api/enrich] Error:', error);

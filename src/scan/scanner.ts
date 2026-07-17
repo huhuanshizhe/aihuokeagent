@@ -1,30 +1,34 @@
 /**
- * 扫描引擎 - 精简版
- * 从 src/lib/radar/scan-engine.ts 提取，去除 Prisma 依赖
- * 使用 SQLite 存储结果
+ * 扫描引擎
+ * Neon PostgreSQL + Drizzle
  */
 
 import { randomUUID } from 'node:crypto';
+import { and, desc, eq, or, sql } from 'drizzle-orm';
 import { db } from '../db.js';
+import {
+  candidates,
+  candidateSources,
+  scanRunCandidates,
+  scanRuns,
+} from '../db/schema.js';
 import { getAdapter, getDefaultDiscoveryAdapterCodes } from '../adapters/registry.js';
-import { generateKeywords, type GeneratedKeyword } from './keyword-gen.js';
+import { generateKeywords } from './keyword-gen.js';
 import type { SearchQuery, NormalizedCandidate } from '../adapters/types.js';
 import { buildCandidateIdentity } from '../pipeline/candidate-utils.js';
 import { getProviderQueryBudget, normalizeDiscoveryOptions } from './discovery-query.js';
 import { qualifyDiscoveredCandidate } from './qualifier.js';
 import { buildDiscoveryResourcePlan } from '../resources/planner.js';
-import { applyHistoricalPerformance, recordSourceRun } from '../resources/metrics.js';
+import { applyHistoricalPerformanceAsync, recordSourceRun } from '../resources/metrics.js';
 import type { DiscoveryResourcePlan } from '../resources/types.js';
-
-// ==================== 类型定义 ====================
 
 export interface ScanOptions {
   keywords?: string[];
   countries?: string[];
   industry?: string;
-  adapters?: string[];       // 指定适配器，默认全部
-  maxResults?: number;       // 每个适配器最多结果
-  companyName?: string;      // 用于 AI 关键词生成
+  adapters?: string[];
+  maxResults?: number;
+  companyName?: string;
   companyIntro?: string;
   products?: string[];
   negativeKeywords?: string[];
@@ -65,7 +69,9 @@ export interface ScanResult {
   reviewSamples: ReviewCandidateSummary[];
 }
 
-// ==================== 扫描执行 ====================
+function nowIso(): string {
+  return new Date().toISOString();
+}
 
 export async function runScan(options: ScanOptions): Promise<ScanResult> {
   options = normalizeDiscoveryOptions(options);
@@ -81,21 +87,28 @@ export async function runScan(options: ScanOptions): Promise<ScanResult> {
     throw new Error('A discovery run supports at most 20 keywords. Split larger strategies into multiple runs.');
   }
 
-  // 1. 记录扫描运行
-  db.prepare(`
-    INSERT INTO scan_runs (id, keywords, countries, industry, status, started_at)
-    VALUES (?, ?, ?, ?, 'running', ?)
-  `).run(runId, JSON.stringify(options.keywords || []), JSON.stringify(options.countries || []), options.industry || null, new Date().toISOString());
+  await db.insert(scanRuns).values({
+    id: runId,
+    keywords: JSON.stringify(options.keywords || []),
+    countries: JSON.stringify(options.countries || []),
+    industry: options.industry || null,
+    status: 'running',
+    startedAt: nowIso(),
+  });
 
   try {
-    // 2. 准备关键词
     let keywords = options.keywords || [];
     if (keywords.length === 0 && options.companyName) {
       console.log('[scanner] No keywords provided, generating with AI...');
       const generated = await generateKeywords(
-        { companyName: options.companyName, companyIntro: options.companyIntro, products: options.products, targetIndustries: options.industry ? [options.industry] : undefined },
+        {
+          companyName: options.companyName,
+          companyIntro: options.companyIntro,
+          products: options.products,
+          targetIndustries: options.industry ? [options.industry] : undefined,
+        },
         options.countries || [],
-        { mode: 'initial' }
+        { mode: 'initial' },
       );
       keywords = generated.map(k => k.keyword);
       console.log(`[scanner] AI generated ${keywords.length} keywords`);
@@ -105,7 +118,7 @@ export async function runScan(options: ScanOptions): Promise<ScanResult> {
       throw new Error('No keywords provided and AI generation failed');
     }
 
-    resourcePlan = applyHistoricalPerformance(buildDiscoveryResourcePlan({
+    resourcePlan = await applyHistoricalPerformanceAsync(buildDiscoveryResourcePlan({
       countries: options.countries || [],
       industry: options.industry,
       keywords,
@@ -113,10 +126,12 @@ export async function runScan(options: ScanOptions): Promise<ScanResult> {
     }));
     keywords = resourcePlan.keywords.length ? resourcePlan.keywords : keywords;
     options.negativeKeywords = resourcePlan.negativeKeywords;
-    db.prepare('UPDATE scan_runs SET keywords = ?, diagnostics = ? WHERE id = ?')
-      .run(JSON.stringify(keywords), JSON.stringify({ resourcePlan }), runId);
 
-    // 3. 确定要使用的适配器
+    await db.update(scanRuns).set({
+      keywords: JSON.stringify(keywords),
+      diagnostics: JSON.stringify({ resourcePlan }),
+    }).where(eq(scanRuns.id, runId));
+
     const configuredDefaults = getDefaultDiscoveryAdapterCodes(options.countries);
     const plannedConfigured = resourcePlan.recommendedAdapters.filter(code => configuredDefaults.includes(code));
     const adapterCodes = options.adapters?.length
@@ -126,7 +141,6 @@ export async function runScan(options: ScanOptions): Promise<ScanResult> {
       throw new Error('No discovery provider is configured. Configure Google Places, Apollo, SerpAPI, Brave Search, or select an official market registry.');
     }
 
-    // 4. 并行执行独立数据源；单个 provider 失败不会中断整个 discovery run。
     await Promise.all(adapterCodes.map(async adapterCode => {
       try {
         const adapter = getAdapter(adapterCode);
@@ -157,7 +171,7 @@ export async function runScan(options: ScanOptions): Promise<ScanResult> {
         const rejected = qualified.filter(item => !item.accepted);
         let newCount = 0;
         for (const item of selected) {
-          const upserted = upsertCandidate(runId, adapterCode, item.candidate);
+          const upserted = await upsertCandidate(runId, adapterCode, item.candidate);
           if (upserted.isNew) newCount++;
         }
 
@@ -176,7 +190,9 @@ export async function runScan(options: ScanOptions): Promise<ScanResult> {
             source: adapterCode,
             score: item.score,
             reasons: item.candidate.qualificationReasons || [],
-            keyword: typeof item.candidate.rawData?.searchKeyword === 'string' ? item.candidate.rawData.searchKeyword : undefined,
+            keyword: typeof item.candidate.rawData?.searchKeyword === 'string'
+              ? item.candidate.rawData.searchKeyword
+              : undefined,
           });
         }
 
@@ -192,11 +208,18 @@ export async function runScan(options: ScanOptions): Promise<ScanResult> {
           keywordStats: result.metadata.keywordStats || [],
           warnings: result.metadata.warnings || [],
         };
-        recordSourceRun({
-          runId, sourceCode: adapterCode, countryCode: resourcePlan?.countryCode, industryPackId: resourcePlan?.industryPackId,
-          status: 'completed', fetched: rawFetched, found: selected.length,
-          qualified: adapterResults[adapterCode].qualified, review: adapterResults[adapterCode].review,
-          rejected: adapterResults[adapterCode].rejected, durationMs: result.metadata.duration,
+        await recordSourceRun({
+          runId,
+          sourceCode: adapterCode,
+          countryCode: resourcePlan?.countryCode,
+          industryPackId: resourcePlan?.industryPackId,
+          status: 'completed',
+          fetched: rawFetched,
+          found: selected.length,
+          qualified: adapterResults[adapterCode].qualified,
+          review: adapterResults[adapterCode].review,
+          rejected: adapterResults[adapterCode].rejected,
+          durationMs: result.metadata.duration,
         });
         console.log(`[scanner] ${adapterCode}: fetched ${rawFetched}, qualified ${adapterResults[adapterCode].qualified}, review ${adapterResults[adapterCode].review}, rejected ${adapterResults[adapterCode].rejected}, deferred ${deferred.length}, new ${newCount}`);
       } catch (e) {
@@ -206,16 +229,24 @@ export async function runScan(options: ScanOptions): Promise<ScanResult> {
           fetched: 0, found: 0, new: 0, rejected: 0,
           qualified: 0, review: 0, deferred: 0, providerFiltered: 0, keywordStats: [], warnings: [],
         };
-        recordSourceRun({
-          runId, sourceCode: adapterCode, countryCode: resourcePlan?.countryCode, industryPackId: resourcePlan?.industryPackId,
-          status: 'failed', fetched: 0, found: 0, qualified: 0, review: 0, rejected: 0,
-          durationMs: 0, errorCode: e instanceof Error ? e.message.slice(0, 160) : String(e).slice(0, 160),
+        await recordSourceRun({
+          runId,
+          sourceCode: adapterCode,
+          countryCode: resourcePlan?.countryCode,
+          industryPackId: resourcePlan?.industryPackId,
+          status: 'failed',
+          fetched: 0,
+          found: 0,
+          qualified: 0,
+          review: 0,
+          rejected: 0,
+          durationMs: 0,
+          errorCode: e instanceof Error ? e.message.slice(0, 160) : String(e).slice(0, 160),
         });
         console.error(`[scanner] ${adapterCode} failed:`, e);
       }
     }));
 
-    // 5. 更新运行记录
     const totalFound = Object.values(adapterResults).reduce((sum, r) => sum + r.found, 0);
     const totalFetched = Object.values(adapterResults).reduce((sum, r) => sum + r.fetched, 0);
     const totalNew = Object.values(adapterResults).reduce((sum, r) => sum + r.new, 0);
@@ -224,20 +255,22 @@ export async function runScan(options: ScanOptions): Promise<ScanResult> {
     const totalReview = Object.values(adapterResults).reduce((sum, r) => sum + r.review, 0);
     const totalDeferred = Object.values(adapterResults).reduce((sum, r) => sum + r.deferred, 0);
     const warnings = Object.entries(adapterResults).flatMap(([adapter, result]) =>
-      result.warnings.map(warning => `[${adapter}] ${warning}`)
+      result.warnings.map(warning => `[${adapter}] ${warning}`),
     );
 
-    db.prepare(`
-      UPDATE scan_runs SET status = 'completed', total_fetched = ?, total_found = ?, total_new = ?,
-        total_rejected = ?, total_qualified = ?, total_review = ?, total_deferred = ?,
-        errors = ?, diagnostics = ?, completed_at = ?
-      WHERE id = ?
-    `).run(
-      totalFetched, totalFound, totalNew, totalRejected, totalQualified, totalReview, totalDeferred,
-      JSON.stringify(errors), JSON.stringify({ resourcePlan, adapterResults, warnings, rejectedSamples, reviewSamples }), new Date().toISOString(), runId,
-    );
-    // API success means the whole discovery run is durable on disk.
-    db.flush();
+    await db.update(scanRuns).set({
+      status: 'completed',
+      totalFetched,
+      totalFound,
+      totalNew,
+      totalRejected,
+      totalQualified,
+      totalReview,
+      totalDeferred,
+      errors: JSON.stringify(errors),
+      diagnostics: JSON.stringify({ resourcePlan, adapterResults, warnings, rejectedSamples, reviewSamples }),
+      completedAt: nowIso(),
+    }).where(eq(scanRuns.id, runId));
 
     return {
       runId,
@@ -259,173 +292,271 @@ export async function runScan(options: ScanOptions): Promise<ScanResult> {
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
     errors.push(errMsg);
-    db.prepare(`UPDATE scan_runs SET status = 'failed', errors = ?, completed_at = ? WHERE id = ?`)
-      .run(JSON.stringify(errors), new Date().toISOString(), runId);
-    db.flush();
+    await db.update(scanRuns).set({
+      status: 'failed',
+      errors: JSON.stringify(errors),
+      completedAt: nowIso(),
+    }).where(eq(scanRuns.id, runId));
 
     return {
-      runId, resourcePlan, totalFetched: 0, totalFound: 0, totalNew: 0, totalRejected: 0,
-      totalQualified: 0, totalReview: 0, totalDeferred: 0,
-      errors, warnings: [], duration: Date.now() - startTime, adapterResults, rejectedSamples, reviewSamples,
+      runId,
+      resourcePlan,
+      totalFetched: 0,
+      totalFound: 0,
+      totalNew: 0,
+      totalRejected: 0,
+      totalQualified: 0,
+      totalReview: 0,
+      totalDeferred: 0,
+      errors,
+      warnings: [],
+      duration: Date.now() - startTime,
+      adapterResults,
+      rejectedSamples,
+      reviewSamples,
     };
   }
 }
 
-// ==================== 候选入库 ====================
-
-function upsertCandidate(runId: string, adapterCode: string, item: NormalizedCandidate): { isNew: boolean; candidateId?: string } {
+async function upsertCandidate(
+  runId: string,
+  adapterCode: string,
+  item: NormalizedCandidate,
+): Promise<{ isNew: boolean; candidateId?: string }> {
   const id = randomUUID();
   const externalId = item.externalId || `fallback-${id}`;
   const identityKey = buildCandidateIdentity(item);
+  const stamp = nowIso();
 
   try {
-    const existing = db.prepare(`
-      SELECT id FROM candidates
-      WHERE (adapter_code = ? AND external_id = ?)
-         OR (? IS NOT NULL AND identity_key = ?)
-      ORDER BY CASE WHEN adapter_code = ? AND external_id = ? THEN 0 ELSE 1 END
-      LIMIT 1
-    `).get(adapterCode, externalId, identityKey || null, identityKey || null, adapterCode, externalId) as { id: string } | undefined;
+    const existingRows = await db
+      .select({ id: candidates.id, matchScore: candidates.matchScore })
+      .from(candidates)
+      .where(
+        or(
+          and(eq(candidates.adapterCode, adapterCode), eq(candidates.externalId, externalId)),
+          identityKey ? eq(candidates.identityKey, identityKey) : sql`false`,
+        ),
+      )
+      .orderBy(
+        sql`CASE WHEN ${candidates.adapterCode} = ${adapterCode} AND ${candidates.externalId} = ${externalId} THEN 0 ELSE 1 END`,
+      )
+      .limit(1);
 
+    const existing = existingRows[0];
     if (existing) {
-      db.prepare(`
-        UPDATE candidates SET
-          description = COALESCE(description, ?), website = COALESCE(website, ?),
-          phone = COALESCE(phone, ?), email = COALESCE(email, ?), address = COALESCE(address, ?),
-          country = COALESCE(country, ?), city = COALESCE(city, ?), industry = COALESCE(industry, ?),
-          business_type = COALESCE(business_type, ?), products = COALESCE(products, ?),
-          brands = COALESCE(brands, ?), employees_count = COALESCE(employees_count, ?),
-          is_target_customer = MAX(is_target_customer, ?), target_reason = COALESCE(target_reason, ?),
-          qualification_tier = CASE WHEN COALESCE(?, 0) >= COALESCE(match_score, 0) THEN ? ELSE qualification_tier END,
-          qualification_reasons = CASE WHEN COALESCE(?, 0) >= COALESCE(match_score, 0) THEN ? ELSE qualification_reasons END,
-          match_score = MAX(COALESCE(match_score, 0), COALESCE(?, 0)),
-          match_explain = COALESCE(match_explain, ?), identity_key = COALESCE(identity_key, ?),
-          updated_at = datetime('now')
-        WHERE id = ?
-      `).run(
-        item.description || null, item.website || null, item.phone || null, item.email || null,
-        item.address || null, item.country || null, item.city || null, item.industry || null,
-        item.businessType || null, item.products ? JSON.stringify(item.products) : null,
-        item.brands ? JSON.stringify(item.brands) : null, item.employeesCount || null,
-        item.isTargetCustomer ? 1 : 0, item.targetReason || null,
-        item.matchScore ?? null, item.qualificationTier || null,
-        item.matchScore ?? null, item.qualificationReasons ? JSON.stringify(item.qualificationReasons) : null,
-        item.matchScore ?? null,
-        item.matchExplain ? JSON.stringify(item.matchExplain) : null, identityKey || null, existing.id,
-      );
-      linkCandidateToRun(runId, existing.id, adapterCode);
-      saveCandidateSource(existing.id, adapterCode, externalId, item);
+      const current = await db.select().from(candidates).where(eq(candidates.id, existing.id)).limit(1);
+      const row = current[0];
+      if (!row) return { isNew: false };
+
+      const nextScore = item.matchScore ?? 0;
+      const prevScore = row.matchScore ?? 0;
+      const takeQualification = nextScore >= prevScore;
+
+      await db.update(candidates).set({
+        description: row.description || item.description || null,
+        website: row.website || item.website || null,
+        phone: row.phone || item.phone || null,
+        email: row.email || item.email || null,
+        address: row.address || item.address || null,
+        country: row.country || item.country || null,
+        city: row.city || item.city || null,
+        industry: row.industry || item.industry || null,
+        businessType: row.businessType || item.businessType || null,
+        products: row.products || (item.products ? JSON.stringify(item.products) : null),
+        brands: row.brands || (item.brands ? JSON.stringify(item.brands) : null),
+        employeesCount: row.employeesCount || item.employeesCount || null,
+        isTargetCustomer: Boolean(row.isTargetCustomer) || Boolean(item.isTargetCustomer),
+        targetReason: row.targetReason || item.targetReason || null,
+        qualificationTier: takeQualification
+          ? (item.qualificationTier || row.qualificationTier || null)
+          : (row.qualificationTier || null),
+        qualificationReasons: takeQualification
+          ? (item.qualificationReasons
+            ? JSON.stringify(item.qualificationReasons)
+            : row.qualificationReasons || null)
+          : (row.qualificationReasons || null),
+        matchScore: Math.max(prevScore, nextScore),
+        matchExplain: row.matchExplain || (item.matchExplain ? JSON.stringify(item.matchExplain) : null),
+        identityKey: row.identityKey || identityKey || null,
+        updatedAt: stamp,
+      }).where(eq(candidates.id, existing.id));
+
+      await linkCandidateToRun(runId, existing.id, adapterCode);
+      await saveCandidateSource(existing.id, adapterCode, externalId, item);
       return { isNew: false, candidateId: existing.id };
     }
 
-    const result = db.prepare(`
-      INSERT OR IGNORE INTO candidates
-        (id, run_id, adapter_code, external_id, display_name, candidate_type, description,
-         website, phone, email, address, country, city, industry,
-         business_type, products, brands, employees_count, is_target_customer, target_reason,
-         qualification_tier, qualification_reasons,
-         match_score, match_explain, identity_key, raw_data, source_url)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id, runId, adapterCode, externalId,
-      item.displayName, item.candidateType, item.description || null,
-      item.website || null, item.phone || null, item.email || null,
-      item.address || null, item.country || null, item.city || null,
-      item.industry || null,
-      item.businessType || null,
-      item.products ? JSON.stringify(item.products) : null,
-      item.brands ? JSON.stringify(item.brands) : null,
-      item.employeesCount || null,
-      item.isTargetCustomer ? 1 : 0,
-      item.targetReason || null,
-      item.qualificationTier || null,
-      item.qualificationReasons ? JSON.stringify(item.qualificationReasons) : null,
-      item.matchScore || null,
-      item.matchExplain ? JSON.stringify(item.matchExplain) : null,
-      identityKey || null,
-      item.rawData ? JSON.stringify(item.rawData) : null,
-      item.sourceUrl || null,
-    );
+    await db.insert(candidates).values({
+      id,
+      runId,
+      adapterCode,
+      externalId,
+      displayName: item.displayName,
+      candidateType: item.candidateType || 'COMPANY',
+      description: item.description || null,
+      website: item.website || null,
+      phone: item.phone || null,
+      email: item.email || null,
+      address: item.address || null,
+      country: item.country || null,
+      city: item.city || null,
+      industry: item.industry || null,
+      businessType: item.businessType || null,
+      products: item.products ? JSON.stringify(item.products) : null,
+      brands: item.brands ? JSON.stringify(item.brands) : null,
+      employeesCount: item.employeesCount || null,
+      isTargetCustomer: Boolean(item.isTargetCustomer),
+      targetReason: item.targetReason || null,
+      qualificationTier: item.qualificationTier || null,
+      qualificationReasons: item.qualificationReasons ? JSON.stringify(item.qualificationReasons) : null,
+      matchScore: item.matchScore ?? null,
+      matchExplain: item.matchExplain ? JSON.stringify(item.matchExplain) : null,
+      identityKey: identityKey || null,
+      rawData: item.rawData ? JSON.stringify(item.rawData) : null,
+      sourceUrl: item.sourceUrl || null,
+      createdAt: stamp,
+      updatedAt: stamp,
+    }).onConflictDoNothing();
 
-    if (result.changes > 0) {
-      linkCandidateToRun(runId, id, adapterCode);
-      saveCandidateSource(id, adapterCode, externalId, item);
+    // Confirm insert succeeded (unique conflict may no-op)
+    const inserted = await db.select({ id: candidates.id }).from(candidates)
+      .where(and(eq(candidates.adapterCode, adapterCode), eq(candidates.externalId, externalId)))
+      .limit(1);
+    const candidateId = inserted[0]?.id;
+    if (candidateId) {
+      await linkCandidateToRun(runId, candidateId, adapterCode);
+      await saveCandidateSource(candidateId, adapterCode, externalId, item);
+      return { isNew: candidateId === id, candidateId };
     }
-    return { isNew: result.changes > 0, candidateId: result.changes > 0 ? id : undefined };
+    return { isNew: false };
   } catch (e) {
-    console.error(`[scanner] Failed to insert candidate:`, e);
+    console.error('[scanner] Failed to insert candidate:', e);
     return { isNew: false };
   }
 }
 
-function linkCandidateToRun(runId: string, candidateId: string, adapterCode: string): void {
-  db.prepare(`
-    INSERT OR IGNORE INTO scan_run_candidates (run_id, candidate_id, adapter_code)
-    VALUES (?, ?, ?)
-  `).run(runId, candidateId, adapterCode);
+async function linkCandidateToRun(runId: string, candidateId: string, adapterCode: string): Promise<void> {
+  await db.insert(scanRunCandidates).values({
+    runId,
+    candidateId,
+    adapterCode,
+    discoveredAt: nowIso(),
+  }).onConflictDoNothing();
 }
 
-function saveCandidateSource(candidateId: string, adapterCode: string, externalId: string, item: NormalizedCandidate): void {
-  db.prepare(`
-    INSERT OR REPLACE INTO candidate_sources
-      (candidate_id, adapter_code, external_id, source_url, raw_data, discovered_at)
-    VALUES (?, ?, ?, ?, ?, datetime('now'))
-  `).run(
+async function saveCandidateSource(
+  candidateId: string,
+  adapterCode: string,
+  externalId: string,
+  item: NormalizedCandidate,
+): Promise<void> {
+  await db.insert(candidateSources).values({
     candidateId,
     adapterCode,
     externalId,
-    item.sourceUrl || null,
-    item.rawData ? JSON.stringify(item.rawData) : null,
-  );
+    sourceUrl: item.sourceUrl || null,
+    rawData: item.rawData ? JSON.stringify(item.rawData) : null,
+    discoveredAt: nowIso(),
+  }).onConflictDoUpdate({
+    target: [candidateSources.candidateId, candidateSources.adapterCode, candidateSources.externalId],
+    set: {
+      sourceUrl: item.sourceUrl || null,
+      rawData: item.rawData ? JSON.stringify(item.rawData) : null,
+      discoveredAt: nowIso(),
+    },
+  });
 }
 
-// ==================== 查询接口 ====================
+function mapCandidateRow(row: typeof candidates.$inferSelect): NormalizedCandidate {
+  return {
+    id: row.id,
+    externalId: row.externalId,
+    sourceUrl: row.sourceUrl || '',
+    displayName: row.displayName,
+    candidateType: (row.candidateType as NormalizedCandidate['candidateType']) || 'COMPANY',
+    description: row.description || undefined,
+    website: row.website || undefined,
+    phone: row.phone || undefined,
+    email: row.email || undefined,
+    address: row.address || undefined,
+    country: row.country || undefined,
+    city: row.city || undefined,
+    industry: row.industry || undefined,
+    businessType: row.businessType || undefined,
+    products: row.products ? JSON.parse(row.products) : undefined,
+    brands: row.brands ? JSON.parse(row.brands) : undefined,
+    employeesCount: row.employeesCount || undefined,
+    isTargetCustomer: Boolean(row.isTargetCustomer),
+    targetReason: row.targetReason || undefined,
+    qualificationTier: (row.qualificationTier as NormalizedCandidate['qualificationTier']) || undefined,
+    qualificationReasons: row.qualificationReasons ? JSON.parse(row.qualificationReasons) : undefined,
+    matchScore: row.matchScore ?? undefined,
+    matchExplain: row.matchExplain ? JSON.parse(row.matchExplain) : undefined,
+    rawData: row.rawData ? JSON.parse(row.rawData) : undefined,
+  };
+}
 
-export function getScanResults(runId: string): NormalizedCandidate[] {
-  const rows = db.prepare(`
-    SELECT c.* FROM candidates c
-    INNER JOIN scan_run_candidates src ON src.candidate_id = c.id
-    WHERE src.run_id = ?
-    ORDER BY c.match_score DESC, c.display_name ASC
-  `).all(runId) as Array<Record<string, unknown>>;
+export async function getScanResults(runId: string): Promise<NormalizedCandidate[]> {
+  const rows = await db
+    .select({ candidate: candidates })
+    .from(candidates)
+    .innerJoin(scanRunCandidates, eq(scanRunCandidates.candidateId, candidates.id))
+    .where(eq(scanRunCandidates.runId, runId))
+    .orderBy(desc(candidates.matchScore), candidates.displayName);
 
-  const uniqueRows = [...new Map(rows.map(row => [
-    (row.identity_key as string | undefined) || `id:${row.id as string}`,
-    row,
+  const uniqueRows = [...new Map(rows.map(({ candidate }) => [
+    candidate.identityKey || `id:${candidate.id}`,
+    candidate,
   ])).values()];
 
-  return uniqueRows.map(row => ({
-    id: row.id as string,
-    externalId: row.external_id as string,
-    sourceUrl: row.source_url as string,
-    displayName: row.display_name as string,
-    candidateType: (row.candidate_type as 'COMPANY' | 'OPPORTUNITY' | 'CONTACT') || 'COMPANY',
-    description: row.description as string | undefined,
-    website: row.website as string | undefined,
-    phone: row.phone as string | undefined,
-    email: row.email as string | undefined,
-    address: row.address as string | undefined,
-    country: row.country as string | undefined,
-    city: row.city as string | undefined,
-    industry: row.industry as string | undefined,
-    businessType: row.business_type as string | undefined,
-    products: row.products ? JSON.parse(row.products as string) : undefined,
-    brands: row.brands ? JSON.parse(row.brands as string) : undefined,
-    employeesCount: row.employees_count as string | undefined,
-    isTargetCustomer: (row.is_target_customer as number) === 1,
-    targetReason: row.target_reason as string | undefined,
-    qualificationTier: row.qualification_tier as NormalizedCandidate['qualificationTier'],
-    qualificationReasons: row.qualification_reasons ? JSON.parse(row.qualification_reasons as string) : undefined,
-    matchScore: row.match_score as number | undefined,
-    matchExplain: row.match_explain ? JSON.parse(row.match_explain as string) : undefined,
-    rawData: row.raw_data ? JSON.parse(row.raw_data as string) : undefined,
+  return uniqueRows.map(mapCandidateRow);
+}
+
+export async function getScanRun(runId: string): Promise<Record<string, unknown> | null> {
+  const rows = await db.select().from(scanRuns).where(eq(scanRuns.id, runId)).limit(1);
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    keywords: row.keywords,
+    countries: row.countries,
+    industry: row.industry,
+    adapter_code: row.adapterCode,
+    status: row.status,
+    total_fetched: row.totalFetched,
+    total_found: row.totalFound,
+    total_new: row.totalNew,
+    total_rejected: row.totalRejected,
+    total_qualified: row.totalQualified,
+    total_review: row.totalReview,
+    total_deferred: row.totalDeferred,
+    errors: row.errors,
+    diagnostics: row.diagnostics,
+    started_at: row.startedAt,
+    completed_at: row.completedAt,
+  };
+}
+
+export async function listScanRuns(limit = 20): Promise<Array<Record<string, unknown>>> {
+  const rows = await db.select().from(scanRuns).orderBy(desc(scanRuns.startedAt)).limit(limit);
+  return rows.map(row => ({
+    id: row.id,
+    keywords: row.keywords,
+    countries: row.countries,
+    industry: row.industry,
+    adapter_code: row.adapterCode,
+    status: row.status,
+    total_fetched: row.totalFetched,
+    total_found: row.totalFound,
+    total_new: row.totalNew,
+    total_rejected: row.totalRejected,
+    total_qualified: row.totalQualified,
+    total_review: row.totalReview,
+    total_deferred: row.totalDeferred,
+    errors: row.errors,
+    diagnostics: row.diagnostics,
+    started_at: row.startedAt,
+    completed_at: row.completedAt,
   }));
-}
-
-export function getScanRun(runId: string): Record<string, unknown> | null {
-  return db.prepare('SELECT * FROM scan_runs WHERE id = ?').get(runId) as Record<string, unknown> | null;
-}
-
-export function listScanRuns(limit = 20): Array<Record<string, unknown>> {
-  return db.prepare('SELECT * FROM scan_runs ORDER BY started_at DESC LIMIT ?').all(limit) as Array<Record<string, unknown>>;
 }

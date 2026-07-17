@@ -200,7 +200,7 @@
           showStatus(`✅ 发现完成：抓取 ${r.totalFetched ?? r.totalFound} 条，合格 ${r.totalQualified ?? 0} 家，待验证 ${r.totalReview ?? 0} 家，过滤 ${r.totalRejected ?? 0} 条，新增 ${r.totalNew} 家，耗时 ${(r.duration/1000).toFixed(1)}s`, 'success');
           if (r.errors?.length) showStatus(`⚠️ 部分错误: ${r.errors.join('; ')}`, 'error');
           if (r.warnings?.length) showStatus(`⚠️ Provider 警告: ${r.warnings.join('; ')}`, 'error');
-          await loadResults(r.runId);
+          renderCandidates(r.candidates || []);
         } else {
           showStatus(`❌ 扫描失败: ${data.error}`, 'error');
         }
@@ -212,39 +212,45 @@
       btn.textContent = '🚀 开始扫描';
     }
 
+    function renderCandidates(candidates) {
+      document.getElementById('resultCount').textContent = `(${candidates.length} 个)`;
+      document.getElementById('results-section').style.display = 'block';
+
+      if (candidates.length === 0) {
+        document.getElementById('resultsContent').innerHTML = '<div class="loading">未发现企业</div>';
+        return;
+      }
+
+      let html = '<table><thead><tr><th>企业名</th><th>国家</th><th>行业</th><th>网站</th><th>资格</th><th>评分</th><th>操作</th></tr></thead><tbody>';
+      for (const c of candidates) {
+        const scoreClass = c.matchScore >= 0.7 ? 'score-high' : c.matchScore >= 0.4 ? 'score-mid' : 'score-low';
+        const score = c.matchScore ? (c.matchScore * 100).toFixed(0) : '-';
+        let host = '-';
+        if (c.website) {
+          try { host = new URL(c.website).hostname; } catch { host = c.website; }
+        }
+        html += `<tr>
+          <td><strong>${esc(c.displayName)}</strong></td>
+          <td>${esc(c.country || '-')}</td>
+          <td>${esc(c.industry || '-')}</td>
+          <td>${c.website ? `<a href="${esc(c.website)}" target="_blank">${esc(host)}</a>` : '-'}</td>
+          <td>${c.qualificationTier === 'qualified' ? '✅ 合格' : c.qualificationTier === 'review' ? '🟡 待验证' : '—'}</td>
+          <td><span class="score ${scoreClass}">${score}</span></td>
+          <td class="actions">
+            <button class="btn btn-secondary" style="padding:4px 12px;font-size:12px" onclick="enrichOne('${esc(c.id || '')}','${esc(c.displayName)}','${esc(c.website || '')}')">补全</button>
+          </td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+      document.getElementById('resultsContent').innerHTML = html;
+    }
+
     async function loadResults(runId) {
       try {
         const res = await VertaxAuth.apiFetch(`${API}/api/scan/results?runId=${runId}`);
         const data = await res.json();
         if (!data.success) return;
-
-        const candidates = data.data.candidates;
-        document.getElementById('resultCount').textContent = `(${candidates.length} 个)`;
-        document.getElementById('results-section').style.display = 'block';
-
-        if (candidates.length === 0) {
-          document.getElementById('resultsContent').innerHTML = '<div class="loading">未发现企业</div>';
-          return;
-        }
-
-        let html = '<table><thead><tr><th>企业名</th><th>国家</th><th>行业</th><th>网站</th><th>资格</th><th>评分</th><th>操作</th></tr></thead><tbody>';
-        for (const c of candidates) {
-          const scoreClass = c.matchScore >= 0.7 ? 'score-high' : c.matchScore >= 0.4 ? 'score-mid' : 'score-low';
-          const score = c.matchScore ? (c.matchScore * 100).toFixed(0) : '-';
-          html += `<tr>
-            <td><strong>${esc(c.displayName)}</strong></td>
-            <td>${esc(c.country || '-')}</td>
-            <td>${esc(c.industry || '-')}</td>
-            <td>${c.website ? `<a href="${esc(c.website)}" target="_blank">${esc(new URL(c.website).hostname)}</a>` : '-'}</td>
-            <td>${c.qualificationTier === 'qualified' ? '✅ 合格' : c.qualificationTier === 'review' ? '🟡 待验证' : '—'}</td>
-            <td><span class="score ${scoreClass}">${score}</span></td>
-            <td class="actions">
-              <button class="btn btn-secondary" style="padding:4px 12px;font-size:12px" onclick="enrichOne('${esc(c.id || '')}','${esc(c.displayName)}','${esc(c.website || '')}')">补全</button>
-            </td>
-          </tr>`;
-        }
-        html += '</tbody></table>';
-        document.getElementById('resultsContent').innerHTML = html;
+        renderCandidates(data.data.candidates || []);
       } catch (e) {
         console.error('Load results failed:', e);
       }

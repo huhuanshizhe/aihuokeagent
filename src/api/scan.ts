@@ -1,7 +1,7 @@
 /**
  * SCAN API 路由
- * POST /api/scan - 执行扫描
- * GET /api/scan/results - 查询扫描结果
+ * POST /api/scan - 执行扫描，一次返回摘要 + candidates
+ * GET /api/scan/results - 按 runId 回看历史结果（可选）
  * GET /api/scan/runs - 列出扫描历史
  */
 
@@ -10,7 +10,7 @@ import { runScan, getScanResults, getScanRun, listScanRuns, type ScanOptions } f
 
 export const scanRouter: Router = Router();
 
-// POST /api/scan - 执行扫描
+// POST /api/scan - 执行扫描（同步，直接返回企业列表）
 scanRouter.post('/', async (req, res) => {
   try {
     const options: ScanOptions = {
@@ -27,10 +27,14 @@ scanRouter.post('/', async (req, res) => {
 
     console.log('[api/scan] Starting scan with options:', JSON.stringify(options, null, 2));
     const result = await runScan(options);
+    const candidates = await getScanResults(result.runId);
 
     res.json({
       success: true,
-      data: result,
+      data: {
+        ...result,
+        candidates,
+      },
     });
   } catch (error) {
     console.error('[api/scan] Error:', error);
@@ -41,8 +45,8 @@ scanRouter.post('/', async (req, res) => {
   }
 });
 
-// GET /api/scan/results?runId=xxx - 查询某次扫描结果
-scanRouter.get('/results', (req, res) => {
+// GET /api/scan/results?runId=xxx - 回看某次历史扫描结果
+scanRouter.get('/results', async (req, res) => {
   try {
     const runId = req.query.runId as string;
     if (!runId) {
@@ -50,13 +54,13 @@ scanRouter.get('/results', (req, res) => {
       return;
     }
 
-    const run = getScanRun(runId);
+    const run = await getScanRun(runId);
     if (!run) {
       res.status(404).json({ success: false, error: 'Scan run not found' });
       return;
     }
 
-    const candidates = getScanResults(runId);
+    const candidates = await getScanResults(runId);
 
     res.json({
       success: true,
@@ -75,10 +79,10 @@ scanRouter.get('/results', (req, res) => {
 });
 
 // GET /api/scan/runs - 列出扫描历史
-scanRouter.get('/runs', (req, res) => {
+scanRouter.get('/runs', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit as string, 10) || 20;
-    const runs = listScanRuns(limit);
+    const runs = await listScanRuns(limit);
 
     res.json({
       success: true,

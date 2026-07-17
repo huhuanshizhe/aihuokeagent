@@ -4,9 +4,11 @@
  */
 
 import { Router } from 'express';
+import { desc, eq } from 'drizzle-orm';
 import { runScan, getScanResults } from '../scan/scanner.js';
 import { runEnrich, type EnrichResult } from '../enrich/contact-engine.js';
 import { db } from '../db.js';
+import { enrichments } from '../db/schema.js';
 import { selectCandidatesForEnrichment } from '../pipeline/candidate-utils.js';
 import { parsePipelineRequest, RequestValidationError } from './validation.js';
 
@@ -80,7 +82,7 @@ pipelineRouter.post('/run', async (req, res) => {
 
     // Step 2: ENRICH (取前 N 个)
     console.log(`[api/pipeline] Step 2/2: ENRICH (top ${options.enrichTopN})`);
-    const candidates = getScanResults(scanResult.runId);
+    const candidates = await getScanResults(scanResult.runId);
     const selection = selectCandidatesForEnrichment(candidates, options.enrichTopN);
     const candidateIds = selection.selected.map(item => item.candidate.id as string);
 
@@ -157,47 +159,58 @@ interface CRMRecord {
   score: number;
 }
 
+function parseJsonArray(value: unknown): string[] {
+  if (!value || typeof value !== 'string') return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
 // GET /api/pipeline/crm/:runId - 导出 CRM 格式数据
-pipelineRouter.get('/crm/:runId', (req, res) => {
+pipelineRouter.get('/crm/:runId', async (req, res) => {
   try {
     const { runId } = req.params;
 
-    // 获取 candidates
-    const candidates = getScanResults(runId);
-    if (candidates.length === 0) {
+    const candidateList = await getScanResults(runId);
+    if (candidateList.length === 0) {
       res.json({ success: false, error: 'No candidates found for this run' });
       return;
     }
 
     const crmRecords: CRMRecord[] = [];
 
-    for (const c of candidates) {
-      // 获取对应的 enrichment 数据
-      const enrichment = c.id ? db.prepare(
-        'SELECT * FROM enrichments WHERE candidate_id = ? ORDER BY created_at DESC LIMIT 1'
-      ).get(c.id) as Record<string, unknown> | undefined : undefined;
+    for (const c of candidateList) {
+      const enrichmentRows = c.id
+        ? await db.select().from(enrichments)
+          .where(eq(enrichments.candidateId, c.id))
+          .orderBy(desc(enrichments.createdAt))
+          .limit(1)
+        : [];
+      const enrichment = enrichmentRows[0];
 
       const record: CRMRecord = {
         companyName: c.displayName,
         country: c.country || null,
         city: c.city || null,
-        website: enrichment?.official_url as string || c.website || null,
-        businessType: enrichment?.business_type as string || c.businessType || null,
+        website: enrichment?.officialUrl || c.website || null,
+        businessType: enrichment?.businessType || c.businessType || null,
         industry: c.industry || null,
-        products: enrichment?.products ? JSON.parse(enrichment.products as string) : c.products || [],
-        brands: enrichment?.brands ? JSON.parse(enrichment.brands as string) : c.brands || [],
-        employeesCount: enrichment?.employees_count as string || c.employeesCount || null,
-        email: enrichment?.emails ? JSON.parse(enrichment.emails as string)[0] || null : c.email || null,
-        phone: enrichment?.phones ? JSON.parse(enrichment.phones as string)[0] || null : c.phone || null,
-        isTargetCustomer: enrichment?.is_target_customer === 1 || c.isTargetCustomer || false,
-        targetReason: enrichment?.target_reason as string || c.targetReason || null,
+        products: enrichment?.products ? parseJsonArray(enrichment.products) : c.products || [],
+        brands: enrichment?.brands ? parseJsonArray(enrichment.brands) : c.brands || [],
+        employeesCount: enrichment?.employeesCount || c.employeesCount || null,
+        email: enrichment?.emails ? parseJsonArray(enrichment.emails)[0] || null : c.email || null,
+        phone: enrichment?.phones ? parseJsonArray(enrichment.phones)[0] || null : c.phone || null,
+        isTargetCustomer: enrichment?.isTargetCustomer === true || c.isTargetCustomer || false,
+        targetReason: enrichment?.targetReason || c.targetReason || null,
         score: Math.round((c.matchScore || 0) * 100),
       };
 
       crmRecords.push(record);
     }
 
-    // 按 score 降序排序
     crmRecords.sort((a, b) => b.score - a.score);
 
     res.json({

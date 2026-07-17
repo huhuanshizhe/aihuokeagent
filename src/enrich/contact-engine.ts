@@ -4,7 +4,9 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { desc, eq } from 'drizzle-orm';
 import { db } from '../db.js';
+import { candidates, enrichments } from '../db/schema.js';
 import { enrichWithExa, type ExaEnrichResult } from './exa-enrich.js';
 import { huntDecisionMakers, type DecisionMaker } from './decision-maker.js';
 import { config } from '../config.js';
@@ -68,36 +70,33 @@ export async function runEnrich(options: EnrichOptions): Promise<EnrichResult[]>
   // 如果提供了 candidateIds，从数据库读取
   if (options.candidateIds?.length) {
     const tasks = options.candidateIds.map(candidateId => async () => {
-      const candidate = db.prepare('SELECT * FROM candidates WHERE id = ?').get(candidateId) as Record<string, unknown> | undefined;
+      const rows = await db.select().from(candidates).where(eq(candidates.id, candidateId)).limit(1);
+      const candidate = rows[0];
       if (!candidate) return undefined;
 
       return enrichOne({
         candidateId,
-        companyName: candidate.display_name as string,
-        domain: (candidate.website as string) ? extractDomain(candidate.website as string) : undefined,
-        website: candidate.website as string | undefined,
-        email: candidate.email as string | undefined,
-        phone: candidate.phone as string | undefined,
-        description: candidate.description as string | undefined,
-        country: candidate.country as string | undefined,
-        industry: candidate.industry as string | undefined,
-        businessType: candidate.business_type as string | undefined,
+        companyName: candidate.displayName,
+        domain: candidate.website ? extractDomain(candidate.website) : undefined,
+        website: candidate.website || undefined,
+        email: candidate.email || undefined,
+        phone: candidate.phone || undefined,
+        description: candidate.description || undefined,
+        country: candidate.country || undefined,
+        industry: candidate.industry || undefined,
+        businessType: candidate.businessType || undefined,
         products: parseStoredStringArray(candidate.products),
         brands: parseStoredStringArray(candidate.brands),
-        employeesCount: candidate.employees_count as string | undefined,
-        isTargetCustomer: candidate.is_target_customer === 1,
-        targetReason: candidate.target_reason as string | undefined,
+        employeesCount: candidate.employeesCount || undefined,
+        isTargetCustomer: Boolean(candidate.isTargetCustomer),
+        targetReason: candidate.targetReason || undefined,
         skipDecisionMakers: options.skipDecisionMakers,
         depth: options.depth,
       });
     });
     const results = await runWithConcurrency(tasks, options.concurrency || 3);
-    const completed = results.filter((result): result is EnrichResult => Boolean(result));
-    // API success means every enrichment and candidate write-back is durable.
-    db.flush();
-    return completed;
+    return results.filter((result): result is EnrichResult => Boolean(result));
   } else if (options.companyName) {
-    // 直接传入公司名
     const result = await enrichOne({
       companyName: options.companyName,
       domain: options.domain,
@@ -107,7 +106,6 @@ export async function runEnrich(options: EnrichOptions): Promise<EnrichResult[]>
       skipDecisionMakers: options.skipDecisionMakers,
       depth: options.depth,
     });
-    db.flush();
     return [result];
   }
 
@@ -315,7 +313,7 @@ async function enrichOne(params: {
   };
 
   // 6. 入库
-  saveEnrichment(enrichmentId, result);
+  await saveEnrichment(enrichmentId, result);
 
   return result;
 }
@@ -430,68 +428,116 @@ function buildFieldEvidence(
   return evidence;
 }
 
-function saveEnrichment(id: string, result: EnrichResult): void {
-  db.prepare(`
-    INSERT OR REPLACE INTO enrichments
-      (id, candidate_id, company_name, domain, country, linkedin_url, official_url,
-       emails, phones, decision_makers,
-       business_type, products, brands, employees_count, is_target_customer, target_reason,
-       enrichment_status, confidence_score, recommended_channel, information_gaps,
-       field_evidence, conflicts, raw_snapshot, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-  `).run(
+async function saveEnrichment(id: string, result: EnrichResult): Promise<void> {
+  const stamp = new Date().toISOString();
+  const existing = await db.select({ id: enrichments.id, createdAt: enrichments.createdAt })
+    .from(enrichments)
+    .where(eq(enrichments.id, id))
+    .limit(1);
+
+  const row = {
     id,
-    result.candidateId || null,
-    result.companyName,
-    result.domain || null,
-    result.country || null,
-    result.linkedInUrl || null,
-    result.website || null,
-    JSON.stringify(result.emails),
-    JSON.stringify(result.phones),
-    JSON.stringify(result.decisionMakers),
-    result.businessType || null,
-    result.products ? JSON.stringify(result.products) : null,
-    result.brands ? JSON.stringify(result.brands) : null,
-    result.employeesCount || null,
-    result.isTargetCustomer === undefined ? null : result.isTargetCustomer ? 1 : 0,
-    result.targetReason || null,
-    result.status,
-    result.confidenceScore,
-    result.recommendedChannel,
-    JSON.stringify(result.informationGaps),
-    JSON.stringify(result.fieldEvidence),
-    JSON.stringify(result.conflicts),
-    JSON.stringify({ description: result.description, errors: result.errors, stages: result.stages }),
-  );
-  if (result.candidateId) {
-    db.prepare(`
-      UPDATE candidates SET
-        website = COALESCE(?, website), email = COALESCE(?, email), phone = COALESCE(?, phone),
-        description = COALESCE(?, description), business_type = COALESCE(?, business_type),
-        products = COALESCE(?, products), brands = COALESCE(?, brands), employees_count = COALESCE(?, employees_count),
-        updated_at = datetime('now')
-      WHERE id = ?
-    `).run(
-      result.website || null, result.emails[0] || null, result.phones[0] || null,
-      result.description || null, result.businessType || null,
-      result.products?.length ? JSON.stringify(result.products) : null,
-      result.brands?.length ? JSON.stringify(result.brands) : null,
-      result.employeesCount || null, result.candidateId,
-    );
+    candidateId: result.candidateId || null,
+    companyName: result.companyName,
+    domain: result.domain || null,
+    country: result.country || null,
+    linkedinUrl: result.linkedInUrl || null,
+    officialUrl: result.website || null,
+    emails: JSON.stringify(result.emails),
+    phones: JSON.stringify(result.phones),
+    decisionMakers: JSON.stringify(result.decisionMakers),
+    businessType: result.businessType || null,
+    products: result.products ? JSON.stringify(result.products) : null,
+    brands: result.brands ? JSON.stringify(result.brands) : null,
+    employeesCount: result.employeesCount || null,
+    isTargetCustomer: result.isTargetCustomer ?? null,
+    targetReason: result.targetReason || null,
+    enrichmentStatus: result.status,
+    confidenceScore: result.confidenceScore,
+    recommendedChannel: result.recommendedChannel,
+    informationGaps: JSON.stringify(result.informationGaps),
+    fieldEvidence: JSON.stringify(result.fieldEvidence),
+    conflicts: JSON.stringify(result.conflicts),
+    rawSnapshot: JSON.stringify({ description: result.description, errors: result.errors, stages: result.stages }),
+    updatedAt: stamp,
+  };
+
+  if (existing[0]) {
+    await db.update(enrichments).set(row).where(eq(enrichments.id, id));
+  } else {
+    await db.insert(enrichments).values({ ...row, createdAt: stamp });
   }
+
+  if (result.candidateId) {
+    const current = await db.select().from(candidates).where(eq(candidates.id, result.candidateId)).limit(1);
+    const cand = current[0];
+    if (cand) {
+      await db.update(candidates).set({
+        website: cand.website || result.website || null,
+        email: cand.email || result.emails[0] || null,
+        phone: cand.phone || result.phones[0] || null,
+        description: cand.description || result.description || null,
+        businessType: cand.businessType || result.businessType || null,
+        products: cand.products || (result.products?.length ? JSON.stringify(result.products) : null),
+        brands: cand.brands || (result.brands?.length ? JSON.stringify(result.brands) : null),
+        employeesCount: cand.employeesCount || result.employeesCount || null,
+        updatedAt: stamp,
+      }).where(eq(candidates.id, result.candidateId));
+    }
+  }
+}
+
+/** Serialize enrichment row to snake_case for existing UI/API consumers */
+function toEnrichmentRow(row: typeof enrichments.$inferSelect): Record<string, unknown> {
+  return {
+    id: row.id,
+    candidate_id: row.candidateId,
+    company_name: row.companyName,
+    domain: row.domain,
+    country: row.country,
+    normalized_domain: row.normalizedDomain,
+    linkedin_url: row.linkedinUrl,
+    official_url: row.officialUrl,
+    identity_confidence: row.identityConfidence,
+    emails: row.emails,
+    phones: row.phones,
+    addresses: row.addresses,
+    contact_forms: row.contactForms,
+    decision_makers: row.decisionMakers,
+    capabilities: row.capabilities,
+    business_type: row.businessType,
+    products: row.products,
+    brands: row.brands,
+    employees_count: row.employeesCount,
+    is_target_customer: row.isTargetCustomer ? 1 : 0,
+    target_reason: row.targetReason,
+    enrichment_status: row.enrichmentStatus,
+    confidence_score: row.confidenceScore,
+    recommended_channel: row.recommendedChannel,
+    information_gaps: row.informationGaps,
+    field_evidence: row.fieldEvidence,
+    conflicts: row.conflicts,
+    raw_snapshot: row.rawSnapshot,
+    created_at: row.createdAt,
+    updated_at: row.updatedAt,
+  };
 }
 
 // ==================== 查询接口 ====================
 
-export function getEnrichment(enrichmentId: string): Record<string, unknown> | null {
-  return db.prepare('SELECT * FROM enrichments WHERE id = ?').get(enrichmentId) as Record<string, unknown> | null;
+export async function getEnrichment(enrichmentId: string): Promise<Record<string, unknown> | null> {
+  const rows = await db.select().from(enrichments).where(eq(enrichments.id, enrichmentId)).limit(1);
+  return rows[0] ? toEnrichmentRow(rows[0]) : null;
 }
 
-export function listEnrichments(limit = 50): Array<Record<string, unknown>> {
-  return db.prepare('SELECT * FROM enrichments ORDER BY created_at DESC LIMIT ?').all(limit) as Array<Record<string, unknown>>;
+export async function listEnrichments(limit = 50): Promise<Array<Record<string, unknown>>> {
+  const rows = await db.select().from(enrichments).orderBy(desc(enrichments.createdAt)).limit(limit);
+  return rows.map(toEnrichmentRow);
 }
 
-export function getEnrichmentsByCandidate(candidateId: string): Array<Record<string, unknown>> {
-  return db.prepare('SELECT * FROM enrichments WHERE candidate_id = ? ORDER BY created_at DESC').all(candidateId) as Array<Record<string, unknown>>;
+export async function getEnrichmentsByCandidate(candidateId: string): Promise<Array<Record<string, unknown>>> {
+  const rows = await db.select().from(enrichments)
+    .where(eq(enrichments.candidateId, candidateId))
+    .orderBy(desc(enrichments.createdAt));
+  return rows.map(toEnrichmentRow);
 }

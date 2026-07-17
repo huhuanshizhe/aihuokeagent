@@ -25,7 +25,7 @@ const __dirname = dirname(__filename);
 async function startServer() {
   // 初始化数据库
   await initDb();
-  initSchema();
+  await initSchema();
 
   const app = express();
 
