@@ -59,9 +59,17 @@ export class DiscoveryResourceRegistry {
 function resolveResourceRoot(): string {
   const configured = process.env.DISCOVERY_RESOURCES_DIR?.trim();
   if (configured) return configured;
-  const cwdRoot = join(process.cwd(), 'resources');
-  if (existsSync(cwdRoot)) return cwdRoot;
-  return join(__dirname, '..', '..', 'resources');
+  const candidates = [
+    join(process.cwd(), 'resources'),
+    // dist/resources/registry.js → dist/resources
+    join(__dirname, '..', 'resources'),
+    // src/resources/registry.ts → repo/resources
+    join(__dirname, '..', '..', 'resources'),
+  ];
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return candidates[0]!;
 }
 
 function loadJsonDirectory<T>(directory: string): T[] {

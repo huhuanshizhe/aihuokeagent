@@ -1,9 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "express",
+  "buildCommand": "npm run build",
   "functions": {
     "src/server.ts": {
-      "includeFiles": "data/cache/thailand-factories.csv",
+      "includeFiles": "{data/cache,dist/data/cache}/thailand-factories.csv",
       "maxDuration": 60
     }
   }

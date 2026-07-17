@@ -14,28 +14,29 @@ const INDUSTRIAL_PROVINCES = new Set(['ชลบุรี', 'ระยอง', '
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-/** Resolve cache path across local (src/dist), Docker (/app), and Vercel (/var/task). */
+/** Resolve cache path: dist layout first, then repo root / Vercel task root. */
 export function getThaiFactoryCachePath(): string {
   const fromEnv = process.env.THAI_FACTORY_CACHE_PATH?.trim();
   if (fromEnv) return fromEnv;
 
+  // Prefer paths that exist. Order matters for self-host (dist-only) vs Vercel (src + includeFiles).
   const candidates = [
+    // dist/adapters → dist/data/cache (packaged by `npm run build`)
+    join(__dirname, '..', THAI_FACTORY_CACHE_REL),
+    // src/adapters (tsx) → repo data/cache; also Vercel includeFiles at /var/task/data/cache
+    join(__dirname, '..', '..', THAI_FACTORY_CACHE_REL),
     join(process.cwd(), THAI_FACTORY_CACHE_REL),
     process.env.LAMBDA_TASK_ROOT
       ? join(process.env.LAMBDA_TASK_ROOT, THAI_FACTORY_CACHE_REL)
       : '',
-    // src/adapters → repo root; dist/adapters → repo root
-    join(__dirname, '..', '..', THAI_FACTORY_CACHE_REL),
-    // bundled single-file edge cases: keep looking upward for data/cache
-    join(__dirname, '..', THAI_FACTORY_CACHE_REL),
     join(__dirname, THAI_FACTORY_CACHE_REL),
   ].filter(Boolean);
 
   for (const candidate of candidates) {
     if (existsSync(candidate)) return candidate;
   }
-  // Prefer cwd for local download writes / status when file is not yet present
-  return candidates[0]!;
+  // Local download writes to repo data/cache (git-tracked source of truth)
+  return join(process.cwd(), THAI_FACTORY_CACHE_REL);
 }
 
 export interface ThaiFactoryCacheInfo {
