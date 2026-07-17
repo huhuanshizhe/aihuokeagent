@@ -76,7 +76,7 @@
       </div>
       <p class="hint">
         一次请求完成：<code>POST /api/public/scan</code> 同步扫描并直接返回摘要 + <code>candidates</code> 企业列表（无需再调 results）。
-        适配器固定自动规划，每适配器最大结果数固定为 20。若配置了 <code>SERVICE_API_KEY</code>，请求需带 Bearer / X-Api-Key。
+        适配器固定自动规划，<strong>每个适配器</strong>最多 20 条；多源结果合并去重后，列表总数可以超过 20。若配置了 <code>SERVICE_API_KEY</code>，请求需带 Bearer / X-Api-Key。
       </p>
       <div class="form-row">
         <div class="form-group">

@@ -4,7 +4,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
 import { db } from '../db.js';
 import {
   candidates,
@@ -169,11 +169,7 @@ export async function runScan(options: ScanOptions): Promise<ScanResult> {
         const selected = eligible.slice(0, options.maxResults || adapter.features.maxResultsPerQuery);
         const deferred = eligible.slice(selected.length);
         const rejected = qualified.filter(item => !item.accepted);
-        let newCount = 0;
-        for (const item of selected) {
-          const upserted = await upsertCandidate(runId, adapterCode, item.candidate);
-          if (upserted.isNew) newCount++;
-        }
+        const newCount = await persistCandidates(runId, adapterCode, selected.map(item => item.candidate));
 
         for (const item of rejected.slice(0, 5)) {
           rejectedSamples.push({
@@ -318,154 +314,212 @@ export async function runScan(options: ScanOptions): Promise<ScanResult> {
   }
 }
 
-async function upsertCandidate(
+async function persistCandidates(
   runId: string,
   adapterCode: string,
-  item: NormalizedCandidate,
-): Promise<{ isNew: boolean; candidateId?: string }> {
-  const id = randomUUID();
-  const externalId = item.externalId || `fallback-${id}`;
-  const identityKey = buildCandidateIdentity(item);
+  items: NormalizedCandidate[],
+): Promise<number> {
+  if (items.length === 0) return 0;
+
   const stamp = nowIso();
+  const prepared = items.map(item => {
+    const id = randomUUID();
+    return {
+      id,
+      item,
+      externalId: item.externalId || `fallback-${id}`,
+      identityKey: buildCandidateIdentity(item),
+    };
+  });
 
   try {
+    const externalIds = [...new Set(prepared.map(p => p.externalId))];
+    const identityKeys = [...new Set(prepared.map(p => p.identityKey).filter((k): k is string => Boolean(k)))];
+
     const existingRows = await db
-      .select({ id: candidates.id, matchScore: candidates.matchScore })
+      .select()
       .from(candidates)
       .where(
         or(
-          and(eq(candidates.adapterCode, adapterCode), eq(candidates.externalId, externalId)),
-          identityKey ? eq(candidates.identityKey, identityKey) : sql`false`,
+          and(eq(candidates.adapterCode, adapterCode), inArray(candidates.externalId, externalIds)),
+          identityKeys.length ? inArray(candidates.identityKey, identityKeys) : sql`false`,
         ),
-      )
-      .orderBy(
-        sql`CASE WHEN ${candidates.adapterCode} = ${adapterCode} AND ${candidates.externalId} = ${externalId} THEN 0 ELSE 1 END`,
-      )
-      .limit(1);
+      );
 
-    const existing = existingRows[0];
-    if (existing) {
-      const current = await db.select().from(candidates).where(eq(candidates.id, existing.id)).limit(1);
-      const row = current[0];
-      if (!row) return { isNew: false };
+    const byAdapterExternal = new Map(
+      existingRows
+        .filter(row => row.adapterCode === adapterCode)
+        .map(row => [`${row.adapterCode}::${row.externalId}`, row] as const),
+    );
+    const byIdentity = new Map(
+      existingRows
+        .filter(row => row.identityKey)
+        .map(row => [row.identityKey as string, row] as const),
+    );
 
-      const nextScore = item.matchScore ?? 0;
-      const prevScore = row.matchScore ?? 0;
-      const takeQualification = nextScore >= prevScore;
+    const toInsert: Array<typeof candidates.$inferInsert> = [];
+    const toUpdate: Array<{ id: string; values: Partial<typeof candidates.$inferInsert> }> = [];
+    const resolved: Array<{ candidateId: string; isNew: boolean; externalId: string; item: NormalizedCandidate }> = [];
 
-      await db.update(candidates).set({
-        description: row.description || item.description || null,
-        website: row.website || item.website || null,
-        phone: row.phone || item.phone || null,
-        email: row.email || item.email || null,
-        address: row.address || item.address || null,
-        country: row.country || item.country || null,
-        city: row.city || item.city || null,
-        industry: row.industry || item.industry || null,
-        businessType: row.businessType || item.businessType || null,
-        products: row.products || (item.products ? JSON.stringify(item.products) : null),
-        brands: row.brands || (item.brands ? JSON.stringify(item.brands) : null),
-        employeesCount: row.employeesCount || item.employeesCount || null,
-        isTargetCustomer: Boolean(row.isTargetCustomer) || Boolean(item.isTargetCustomer),
-        targetReason: row.targetReason || item.targetReason || null,
-        qualificationTier: takeQualification
-          ? (item.qualificationTier || row.qualificationTier || null)
-          : (row.qualificationTier || null),
-        qualificationReasons: takeQualification
-          ? (item.qualificationReasons
-            ? JSON.stringify(item.qualificationReasons)
-            : row.qualificationReasons || null)
-          : (row.qualificationReasons || null),
-        matchScore: Math.max(prevScore, nextScore),
-        matchExplain: row.matchExplain || (item.matchExplain ? JSON.stringify(item.matchExplain) : null),
-        identityKey: row.identityKey || identityKey || null,
+    for (const prep of prepared) {
+      const existing =
+        byAdapterExternal.get(`${adapterCode}::${prep.externalId}`)
+        || (prep.identityKey ? byIdentity.get(prep.identityKey) : undefined);
+
+      if (existing) {
+        const nextScore = prep.item.matchScore ?? 0;
+        const prevScore = existing.matchScore ?? 0;
+        const takeQualification = nextScore >= prevScore;
+        const values: Partial<typeof candidates.$inferInsert> = {
+          description: existing.description || prep.item.description || null,
+          website: existing.website || prep.item.website || null,
+          phone: existing.phone || prep.item.phone || null,
+          email: existing.email || prep.item.email || null,
+          address: existing.address || prep.item.address || null,
+          country: existing.country || prep.item.country || null,
+          city: existing.city || prep.item.city || null,
+          industry: existing.industry || prep.item.industry || null,
+          businessType: existing.businessType || prep.item.businessType || null,
+          products: existing.products || (prep.item.products ? JSON.stringify(prep.item.products) : null),
+          brands: existing.brands || (prep.item.brands ? JSON.stringify(prep.item.brands) : null),
+          employeesCount: existing.employeesCount || prep.item.employeesCount || null,
+          isTargetCustomer: Boolean(existing.isTargetCustomer) || Boolean(prep.item.isTargetCustomer),
+          targetReason: existing.targetReason || prep.item.targetReason || null,
+          qualificationTier: takeQualification
+            ? (prep.item.qualificationTier || existing.qualificationTier || null)
+            : (existing.qualificationTier || null),
+          qualificationReasons: takeQualification
+            ? (prep.item.qualificationReasons
+              ? JSON.stringify(prep.item.qualificationReasons)
+              : existing.qualificationReasons || null)
+            : (existing.qualificationReasons || null),
+          matchScore: Math.max(prevScore, nextScore),
+          matchExplain: existing.matchExplain
+            || (prep.item.matchExplain ? JSON.stringify(prep.item.matchExplain) : null),
+          identityKey: existing.identityKey || prep.identityKey || null,
+          updatedAt: stamp,
+        };
+        toUpdate.push({ id: existing.id, values });
+        resolved.push({
+          candidateId: existing.id,
+          isNew: false,
+          externalId: prep.externalId,
+          item: prep.item,
+        });
+        // Keep maps fresh for later duplicates in same batch
+        byAdapterExternal.set(`${adapterCode}::${prep.externalId}`, { ...existing, ...values, id: existing.id } as typeof existing);
+        if (values.identityKey) {
+          byIdentity.set(values.identityKey, { ...existing, ...values, id: existing.id } as typeof existing);
+        }
+        continue;
+      }
+
+      const row: typeof candidates.$inferInsert = {
+        id: prep.id,
+        runId,
+        adapterCode,
+        externalId: prep.externalId,
+        displayName: prep.item.displayName,
+        candidateType: prep.item.candidateType || 'COMPANY',
+        description: prep.item.description || null,
+        website: prep.item.website || null,
+        phone: prep.item.phone || null,
+        email: prep.item.email || null,
+        address: prep.item.address || null,
+        country: prep.item.country || null,
+        city: prep.item.city || null,
+        industry: prep.item.industry || null,
+        businessType: prep.item.businessType || null,
+        products: prep.item.products ? JSON.stringify(prep.item.products) : null,
+        brands: prep.item.brands ? JSON.stringify(prep.item.brands) : null,
+        employeesCount: prep.item.employeesCount || null,
+        isTargetCustomer: Boolean(prep.item.isTargetCustomer),
+        targetReason: prep.item.targetReason || null,
+        qualificationTier: prep.item.qualificationTier || null,
+        qualificationReasons: prep.item.qualificationReasons
+          ? JSON.stringify(prep.item.qualificationReasons)
+          : null,
+        matchScore: prep.item.matchScore ?? null,
+        matchExplain: prep.item.matchExplain ? JSON.stringify(prep.item.matchExplain) : null,
+        identityKey: prep.identityKey || null,
+        rawData: prep.item.rawData ? JSON.stringify(prep.item.rawData) : null,
+        sourceUrl: prep.item.sourceUrl || null,
+        createdAt: stamp,
         updatedAt: stamp,
-      }).where(eq(candidates.id, existing.id));
-
-      await linkCandidateToRun(runId, existing.id, adapterCode);
-      await saveCandidateSource(existing.id, adapterCode, externalId, item);
-      return { isNew: false, candidateId: existing.id };
+      };
+      toInsert.push(row);
+      resolved.push({
+        candidateId: prep.id,
+        isNew: true,
+        externalId: prep.externalId,
+        item: prep.item,
+      });
+      byAdapterExternal.set(`${adapterCode}::${prep.externalId}`, row as typeof existingRows[number]);
+      if (prep.identityKey) {
+        byIdentity.set(prep.identityKey, row as typeof existingRows[number]);
+      }
     }
 
-    await db.insert(candidates).values({
-      id,
+    if (toInsert.length) {
+      await db.insert(candidates).values(toInsert).onConflictDoNothing();
+      // Conflicts may no-op; resolve actual ids for this adapter+externalId set
+      const insertedExt = toInsert.map(r => r.externalId);
+      const confirmed = await db
+        .select({ id: candidates.id, externalId: candidates.externalId })
+        .from(candidates)
+        .where(and(eq(candidates.adapterCode, adapterCode), inArray(candidates.externalId, insertedExt)));
+      const confirmedByExt = new Map(confirmed.map(r => [r.externalId, r.id]));
+      for (const entry of resolved) {
+        if (!entry.isNew) continue;
+        const actualId = confirmedByExt.get(entry.externalId);
+        if (actualId) {
+          entry.isNew = actualId === entry.candidateId;
+          entry.candidateId = actualId;
+        }
+      }
+    }
+
+    if (toUpdate.length) {
+      // Parallel updates share the pool; still far fewer RTT waves than per-candidate 5-step chain
+      await Promise.all(
+        toUpdate.map(({ id, values }) => db.update(candidates).set(values).where(eq(candidates.id, id))),
+      );
+    }
+
+    const links = resolved.map(entry => ({
       runId,
+      candidateId: entry.candidateId,
       adapterCode,
-      externalId,
-      displayName: item.displayName,
-      candidateType: item.candidateType || 'COMPANY',
-      description: item.description || null,
-      website: item.website || null,
-      phone: item.phone || null,
-      email: item.email || null,
-      address: item.address || null,
-      country: item.country || null,
-      city: item.city || null,
-      industry: item.industry || null,
-      businessType: item.businessType || null,
-      products: item.products ? JSON.stringify(item.products) : null,
-      brands: item.brands ? JSON.stringify(item.brands) : null,
-      employeesCount: item.employeesCount || null,
-      isTargetCustomer: Boolean(item.isTargetCustomer),
-      targetReason: item.targetReason || null,
-      qualificationTier: item.qualificationTier || null,
-      qualificationReasons: item.qualificationReasons ? JSON.stringify(item.qualificationReasons) : null,
-      matchScore: item.matchScore ?? null,
-      matchExplain: item.matchExplain ? JSON.stringify(item.matchExplain) : null,
-      identityKey: identityKey || null,
-      rawData: item.rawData ? JSON.stringify(item.rawData) : null,
-      sourceUrl: item.sourceUrl || null,
-      createdAt: stamp,
-      updatedAt: stamp,
-    }).onConflictDoNothing();
-
-    // Confirm insert succeeded (unique conflict may no-op)
-    const inserted = await db.select({ id: candidates.id }).from(candidates)
-      .where(and(eq(candidates.adapterCode, adapterCode), eq(candidates.externalId, externalId)))
-      .limit(1);
-    const candidateId = inserted[0]?.id;
-    if (candidateId) {
-      await linkCandidateToRun(runId, candidateId, adapterCode);
-      await saveCandidateSource(candidateId, adapterCode, externalId, item);
-      return { isNew: candidateId === id, candidateId };
+      discoveredAt: stamp,
+    }));
+    if (links.length) {
+      await db.insert(scanRunCandidates).values(links).onConflictDoNothing();
     }
-    return { isNew: false };
+
+    const sources = resolved.map(entry => ({
+      candidateId: entry.candidateId,
+      adapterCode,
+      externalId: entry.externalId,
+      sourceUrl: entry.item.sourceUrl || null,
+      rawData: entry.item.rawData ? JSON.stringify(entry.item.rawData) : null,
+      discoveredAt: stamp,
+    }));
+    if (sources.length) {
+      await db.insert(candidateSources).values(sources).onConflictDoUpdate({
+        target: [candidateSources.candidateId, candidateSources.adapterCode, candidateSources.externalId],
+        set: {
+          sourceUrl: sql`excluded.source_url`,
+          rawData: sql`excluded.raw_data`,
+          discoveredAt: sql`excluded.discovered_at`,
+        },
+      });
+    }
+
+    return resolved.filter(entry => entry.isNew).length;
   } catch (e) {
-    console.error('[scanner] Failed to insert candidate:', e);
-    return { isNew: false };
+    console.error('[scanner] Failed to persist candidates batch:', e);
+    return 0;
   }
-}
-
-async function linkCandidateToRun(runId: string, candidateId: string, adapterCode: string): Promise<void> {
-  await db.insert(scanRunCandidates).values({
-    runId,
-    candidateId,
-    adapterCode,
-    discoveredAt: nowIso(),
-  }).onConflictDoNothing();
-}
-
-async function saveCandidateSource(
-  candidateId: string,
-  adapterCode: string,
-  externalId: string,
-  item: NormalizedCandidate,
-): Promise<void> {
-  await db.insert(candidateSources).values({
-    candidateId,
-    adapterCode,
-    externalId,
-    sourceUrl: item.sourceUrl || null,
-    rawData: item.rawData ? JSON.stringify(item.rawData) : null,
-    discoveredAt: nowIso(),
-  }).onConflictDoUpdate({
-    target: [candidateSources.candidateId, candidateSources.adapterCode, candidateSources.externalId],
-    set: {
-      sourceUrl: item.sourceUrl || null,
-      rawData: item.rawData ? JSON.stringify(item.rawData) : null,
-      discoveredAt: nowIso(),
-    },
-  });
 }
 
 function mapCandidateRow(row: typeof candidates.$inferSelect): NormalizedCandidate {

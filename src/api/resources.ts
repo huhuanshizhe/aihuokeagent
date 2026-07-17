@@ -3,6 +3,10 @@ import { normalizeCountryCode } from '../lib/country-utils.js';
 import { resourceRegistry } from '../resources/registry.js';
 import { buildDiscoveryResourcePlan } from '../resources/planner.js';
 import { applyHistoricalPerformanceAsync, getSourceQualityMetrics } from '../resources/metrics.js';
+import {
+  downloadThaiFactoryCache,
+  getThaiFactoryCacheInfo,
+} from '../adapters/thailand-factory.js';
 
 export const resourcesRouter: Router = Router();
 
@@ -43,6 +47,23 @@ resourcesRouter.post('/reload', (_req, res) => {
     res.json({ success: true, data: { loadedAt: resourceRegistry.getLoadedAt() } });
   } catch (error) {
     res.status(400).json({ success: false, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+resourcesRouter.get('/thai-factory/cache', (_req, res) => {
+  res.json({ success: true, data: getThaiFactoryCacheInfo() });
+});
+
+resourcesRouter.post('/thai-factory/download', async (_req, res) => {
+  try {
+    const data = await downloadThaiFactoryCache();
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('[api/resources/thai-factory/download]', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 });
 

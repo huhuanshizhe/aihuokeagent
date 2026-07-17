@@ -26,6 +26,10 @@
     .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
     .btn-secondary { background: #f0f0f0; color: #333; }
     .btn-secondary:hover { background: #e0e0e0; }
+    .thai-cache-box { margin-top: 16px; padding: 14px 16px; background: #f8f9fc; border: 1px solid #e8eaef; border-radius: 8px; }
+    .thai-cache-box h3 { font-size: 14px; margin-bottom: 8px; color: #444; }
+    .thai-cache-meta { font-size: 13px; color: #666; line-height: 1.6; margin-bottom: 10px; }
+    .thai-cache-meta code { font-size: 12px; background: #eef1f6; padding: 1px 6px; border-radius: 4px; }
     .status-bar { padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; }
     .status-info { background: #e3f2fd; color: #1565c0; }
     .status-success { background: #e8f5e9; color: #2e7d32; }
@@ -102,6 +106,12 @@
           <input type="number" id="maxResults" value="20" min="1" max="100">
         </div>
       </div>
+      <div class="thai-cache-box">
+        <h3>🇹🇭 泰国工业部工厂库 CSV</h3>
+        <div class="thai-cache-meta" id="thaiCacheMeta">正在检查本地缓存…</div>
+        <button class="btn btn-secondary" id="thaiDownloadBtn" type="button" onclick="downloadThaiFactoryCsv()">⬇️ 下载 / 更新 DIW 工厂数据</button>
+        <small style="display:block;margin-top:8px;color:#667085">约 80MB，需数分钟。保存到 <code>data/cache/thailand-factories.csv</code> 后提交 Git；线上扫描只读该文件，不会在服务器下载。</small>
+      </div>
       <div style="margin-top:16px">
         <button class="btn btn-secondary" onclick="previewResourcePlan()" style="margin-right:8px">🧭 预览资源策略</button>
         <a class="btn btn-secondary" href="/resources.html" style="margin-right:8px;text-decoration:none">资源中心</a>
@@ -125,6 +135,65 @@
   <script src="/auth.js"></script>
   <script>
     const API = '';
+
+    function formatBytes(bytes) {
+      if (!bytes) return '0 B';
+      const units = ['B', 'KB', 'MB', 'GB'];
+      let n = bytes;
+      let i = 0;
+      while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+      return `${n.toFixed(i ? 1 : 0)} ${units[i]}`;
+    }
+
+    function renderThaiCacheMeta(info) {
+      const el = document.getElementById('thaiCacheMeta');
+      if (!info.exists) {
+        el.innerHTML = `本地尚无缓存文件 <code>${esc(info.relativePath)}</code>。点击下方按钮下载（仅本机写入）。`;
+        return;
+      }
+      const when = info.updatedAt ? new Date(info.updatedAt).toLocaleString() : '—';
+      const count = info.recordCount != null ? info.recordCount.toLocaleString('en-US') : '?';
+      el.innerHTML = [
+        `已缓存 <code>${esc(info.relativePath)}</code>`,
+        `大小 ${formatBytes(info.sizeBytes)}，约 ${count} 条工厂记录`,
+        `文件时间 ${when}`,
+        info.gitHint,
+      ].join('<br>');
+    }
+
+    async function refreshThaiCacheStatus() {
+      try {
+        const res = await VertaxAuth.apiFetch(`${API}/api/resources/thai-factory/cache`);
+        const data = await res.json();
+        if (data.success) renderThaiCacheMeta(data.data);
+      } catch (e) {
+        document.getElementById('thaiCacheMeta').textContent = `缓存状态读取失败：${e.message}`;
+      }
+    }
+
+    async function downloadThaiFactoryCsv() {
+      const btn = document.getElementById('thaiDownloadBtn');
+      btn.disabled = true;
+      const prev = btn.textContent;
+      btn.textContent = '⏳ 下载中（约 80MB，请耐心等待）…';
+      showStatus('正在从泰国工业部下载全量工厂 CSV…', 'info');
+      try {
+        const res = await VertaxAuth.apiFetch(`${API}/api/resources/thai-factory/download`, { method: 'POST' });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || '下载失败');
+        const r = data.data;
+        showStatus(
+          `✅ 已保存 ${r.relativePath}（${formatBytes(r.sizeBytes)}，${r.recordCount.toLocaleString('en-US')} 条，${(r.durationMs / 1000).toFixed(1)}s）。请 git add 后提交。`,
+          'success',
+        );
+        await refreshThaiCacheStatus();
+      } catch (e) {
+        showStatus(`❌ DIW 下载失败: ${e.message}`, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = prev;
+      }
+    }
 
     async function previewResourcePlan() {
       const keywordsText = document.getElementById('keywords').value.trim();
@@ -312,6 +381,7 @@
     }
 
     VertaxAuth.ensureApiKey(API);
+    refreshThaiCacheStatus();
   </script>
 </body>
 </html>

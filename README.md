@@ -55,7 +55,7 @@ Docker deployment, API authentication, and offline-client examples are documente
 - 候选按匹配度最高的单个关键词评分，避免多关键词池稀释相关性
 - 资格分为 `qualified`、`review`、`rejected`，边界企业进入待验证而不是直接丢弃
 - Provider HTTP、配额和 AI 抽取警告会进入顶层 API 与页面提示；安全回退不会把目录、榜单或市场报告写成企业
-- 泰国市场默认组合 Google Places、Brave Places 与泰国工业部 DIW 官方工厂底库；DIW 全量 CSV 下载后缓存在 `data/cache`，后续扫描复用
+- 泰国市场默认组合 Google Places、Brave Places 与泰国工业部 DIW 官方工厂底库；CSV 在扫描页本地下载后缓存在 `data/cache` 并提交 Git
 - Google Places 对泰国/越南使用国家矩形硬限制，工业关键词同时生成本地语言变体，并按主要工业省份轮转查询
 - Brave Web 在不支持 `TH`/`VN` 国家枚举时使用 `ALL + loc:`；Brave Places 则使用城市名称和地理请求头定位
 
@@ -245,10 +245,16 @@ DASHSCOPE_MODEL=qwen3.7-plus
 
 API Key 必须在百炼控制台创建并只保存在本机 `.env`。项目仍兼容旧的 `TEXT_API_KEY`、`TEXT_BASE_URL` 和 `TEXT_MODEL` 变量；若两套变量同时存在，优先使用 `DASHSCOPE_*`。
 
-泰国官方工厂数据不需要 API Key。首次泰国扫描会从工业部 DIW 下载全量 CSV 并缓存；也可以提前指定本地文件：
+泰国官方工厂数据不需要 API Key。在扫描页点击「下载 / 更新 DIW 工厂数据」保存到 `data/cache/thailand-factories.csv` 后提交 Git；线上只读该文件，扫描时不会下载。
+
+**部署注意（Vercel）：**
+- `vercel.json` 已用 `includeFiles` 把该 CSV 打进函数包
+- 该文件已从 Git LFS 排除（避免线上只拿到 LFS 指针）
+- 包体约 +80MB，确认项目可走 Large Functions / 或未超限
+- 也可设 `THAI_FACTORY_CACHE_PATH` 指向外置只读路径
 
 ```env
-THAI_FACTORY_CACHE_PATH=D:\data\thailand-factories.csv
+THAI_FACTORY_CACHE_PATH=/absolute/path/thailand-factories.csv
 ```
 
 完整发现—补全调用：

@@ -1,25 +1,115 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Adapter, HealthStatus, NormalizedCandidate, SearchQuery, SearchResult } from './types.js';
 import { normalizeCountryCode } from '../lib/country-utils.js';
 
-const SOURCE_URL = 'https://openapi.industry.go.th/gdcatalog/Factory_Data_CSV.php?download_all=1';
+export const THAI_FACTORY_SOURCE_URL =
+  'https://openapi.industry.go.th/gdcatalog/Factory_Data_CSV.php?download_all=1';
+export const THAI_FACTORY_CACHE_REL = 'data/cache/thailand-factories.csv';
 const DIRECTORY_URL = 'https://www.diw.go.th/webdiw/search-factory/';
+const LOCAL_DOWNLOAD_TIMEOUT_MS = Number(process.env.THAI_FACTORY_DOWNLOAD_TIMEOUT_MS || 300_000);
 const INDUSTRIAL_PROVINCES = new Set(['ชลบุรี', 'ระยอง', 'สมุทรปราการ', 'ฉะเชิงเทรา', 'พระนครศรีอยุธยา', 'ปทุมธานี']);
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DEFAULT_CACHE_PATH = join(__dirname, '..', '..', 'data', 'cache', 'thailand-factories.csv');
 
-/** Prefer repo cache locally; on serverless (Vercel/Lambda) use /tmp because /var/task is read-only. */
-function resolveCachePath(): string {
+/** Resolve cache path across local (src/dist), Docker (/app), and Vercel (/var/task). */
+export function getThaiFactoryCachePath(): string {
   const fromEnv = process.env.THAI_FACTORY_CACHE_PATH?.trim();
   if (fromEnv) return fromEnv;
-  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT) {
-    return join(process.env.TMPDIR || '/tmp', 'aihuokeagent', 'thailand-factories.csv');
+
+  const candidates = [
+    join(process.cwd(), THAI_FACTORY_CACHE_REL),
+    process.env.LAMBDA_TASK_ROOT
+      ? join(process.env.LAMBDA_TASK_ROOT, THAI_FACTORY_CACHE_REL)
+      : '',
+    // src/adapters → repo root; dist/adapters → repo root
+    join(__dirname, '..', '..', THAI_FACTORY_CACHE_REL),
+    // bundled single-file edge cases: keep looking upward for data/cache
+    join(__dirname, '..', THAI_FACTORY_CACHE_REL),
+    join(__dirname, THAI_FACTORY_CACHE_REL),
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
   }
-  return DEFAULT_CACHE_PATH;
+  // Prefer cwd for local download writes / status when file is not yet present
+  return candidates[0]!;
+}
+
+export interface ThaiFactoryCacheInfo {
+  path: string;
+  relativePath: string;
+  exists: boolean;
+  sizeBytes?: number;
+  updatedAt?: string;
+  recordCount?: number;
+  gitHint: string;
+}
+
+export function getThaiFactoryCacheInfo(): ThaiFactoryCacheInfo {
+  const path = getThaiFactoryCachePath();
+  const info: ThaiFactoryCacheInfo = {
+    path,
+    relativePath: THAI_FACTORY_CACHE_REL,
+    exists: existsSync(path),
+    gitHint: `下载后提交：git add ${THAI_FACTORY_CACHE_REL}`,
+  };
+  if (!info.exists) return info;
+  const stat = statSync(path);
+  info.sizeBytes = stat.size;
+  info.updatedAt = stat.mtime.toISOString();
+  try {
+    info.recordCount = parseThaiFactoryCsv(readFileSync(path, 'utf8')).length;
+  } catch {
+    // ignore parse errors on status
+  }
+  return info;
+}
+
+export function invalidateThaiFactoryCache(): void {
+  recordCache = undefined;
+}
+
+export interface ThaiFactoryDownloadResult {
+  path: string;
+  relativePath: string;
+  sizeBytes: number;
+  recordCount: number;
+  durationMs: number;
+  sourceUrl: string;
+}
+
+/** Local dev: download full DIW CSV into data/cache for Git commit. */
+export async function downloadThaiFactoryCache(): Promise<ThaiFactoryDownloadResult> {
+  const started = Date.now();
+  const cachePath = getThaiFactoryCachePath();
+  const url = process.env.THAI_FACTORY_DATA_URL?.trim() || THAI_FACTORY_SOURCE_URL;
+
+  const response = await fetch(url, { signal: AbortSignal.timeout(LOCAL_DOWNLOAD_TIMEOUT_MS) });
+  if (!response.ok) throw new Error(`Thailand DIW factory download failed: HTTP ${response.status}`);
+  const csv = await response.text();
+  if (!csv.includes('FACREG') || !csv.includes('FPROVNAME')) {
+    throw new Error('Thailand DIW factory download returned an unexpected format');
+  }
+
+  const records = parseThaiFactoryCsv(csv);
+  if (records.length === 0) throw new Error('Thailand DIW factory dataset did not contain readable records');
+
+  await mkdir(dirname(cachePath), { recursive: true });
+  await writeFile(cachePath, csv, 'utf8');
+  invalidateThaiFactoryCache();
+  recordCache = records;
+
+  return {
+    path: cachePath,
+    relativePath: THAI_FACTORY_CACHE_REL,
+    sizeBytes: Buffer.byteLength(csv, 'utf8'),
+    recordCount: records.length,
+    durationMs: Date.now() - started,
+    sourceUrl: url,
+  };
 }
 
 export interface ThaiFactoryRecord {
@@ -128,11 +218,13 @@ export class ThailandFactoryAdapter implements Adapter {
   }
 
   async healthCheck(): Promise<HealthStatus> {
-    const cachePath = resolveCachePath();
+    const info = getThaiFactoryCacheInfo();
     return {
-      healthy: true,
+      healthy: info.exists,
       latency: 0,
-      message: existsSync(cachePath) ? 'Official DIW factory cache available' : 'Official DIW factory data will be downloaded on first Thailand scan',
+      message: info.exists
+        ? `DIW factory cache: ${info.recordCount?.toLocaleString('en-US') ?? '?'} records`
+        : `DIW cache missing — download ${THAI_FACTORY_CACHE_REL} from scan page`,
     };
   }
 }
@@ -141,27 +233,13 @@ async function loadFactoryRecords(): Promise<ThaiFactoryRecord[]> {
   if (recordCache) return recordCache;
   if (cachePromise) return cachePromise;
   cachePromise = (async () => {
-    const cachePath = resolveCachePath();
-    let csv: string;
-    if (existsSync(cachePath)) {
-      csv = await readFile(cachePath, 'utf8');
-    } else {
-      const url = process.env.THAI_FACTORY_DATA_URL?.trim() || SOURCE_URL;
-      const response = await fetch(url, { signal: AbortSignal.timeout(240000) });
-      if (!response.ok) throw new Error(`Thailand DIW factory download failed: HTTP ${response.status}`);
-      csv = await response.text();
-      if (!csv.includes('FACREG') || !csv.includes('FPROVNAME')) throw new Error('Thailand DIW factory download returned an unexpected format');
-      // Disk cache is best-effort: serverless FS may be read-only outside /tmp.
-      try {
-        await mkdir(dirname(cachePath), { recursive: true });
-        await writeFile(cachePath, csv, 'utf8');
-      } catch (error) {
-        console.warn(
-          `[thailand_factory] cache write skipped (${cachePath}):`,
-          error instanceof Error ? error.message : String(error),
-        );
-      }
+    const cachePath = getThaiFactoryCachePath();
+    if (!existsSync(cachePath)) {
+      throw new Error(
+        `DIW factory cache missing (${THAI_FACTORY_CACHE_REL}). Download from scan page, then commit to Git.`,
+      );
     }
+    const csv = await readFile(cachePath, 'utf8');
     recordCache = parseThaiFactoryCsv(csv);
     if (recordCache.length === 0) throw new Error('Thailand DIW factory dataset did not contain readable records');
     return recordCache;
