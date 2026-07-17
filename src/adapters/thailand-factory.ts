@@ -12,6 +12,16 @@ const INDUSTRIAL_PROVINCES = new Set(['ชลบุรี', 'ระยอง', '
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_CACHE_PATH = join(__dirname, '..', '..', 'data', 'cache', 'thailand-factories.csv');
 
+/** Prefer repo cache locally; on serverless (Vercel/Lambda) use /tmp because /var/task is read-only. */
+function resolveCachePath(): string {
+  const fromEnv = process.env.THAI_FACTORY_CACHE_PATH?.trim();
+  if (fromEnv) return fromEnv;
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT) {
+    return join(process.env.TMPDIR || '/tmp', 'aihuokeagent', 'thailand-factories.csv');
+  }
+  return DEFAULT_CACHE_PATH;
+}
+
 export interface ThaiFactoryRecord {
   registrationId: string;
   factoryName: string;
@@ -118,7 +128,7 @@ export class ThailandFactoryAdapter implements Adapter {
   }
 
   async healthCheck(): Promise<HealthStatus> {
-    const cachePath = process.env.THAI_FACTORY_CACHE_PATH?.trim() || DEFAULT_CACHE_PATH;
+    const cachePath = resolveCachePath();
     return {
       healthy: true,
       latency: 0,
@@ -131,7 +141,7 @@ async function loadFactoryRecords(): Promise<ThaiFactoryRecord[]> {
   if (recordCache) return recordCache;
   if (cachePromise) return cachePromise;
   cachePromise = (async () => {
-    const cachePath = process.env.THAI_FACTORY_CACHE_PATH?.trim() || DEFAULT_CACHE_PATH;
+    const cachePath = resolveCachePath();
     let csv: string;
     if (existsSync(cachePath)) {
       csv = await readFile(cachePath, 'utf8');
@@ -141,8 +151,16 @@ async function loadFactoryRecords(): Promise<ThaiFactoryRecord[]> {
       if (!response.ok) throw new Error(`Thailand DIW factory download failed: HTTP ${response.status}`);
       csv = await response.text();
       if (!csv.includes('FACREG') || !csv.includes('FPROVNAME')) throw new Error('Thailand DIW factory download returned an unexpected format');
-      await mkdir(dirname(cachePath), { recursive: true });
-      await writeFile(cachePath, csv, 'utf8');
+      // Disk cache is best-effort: serverless FS may be read-only outside /tmp.
+      try {
+        await mkdir(dirname(cachePath), { recursive: true });
+        await writeFile(cachePath, csv, 'utf8');
+      } catch (error) {
+        console.warn(
+          `[thailand_factory] cache write skipped (${cachePath}):`,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
     }
     recordCache = parseThaiFactoryCsv(csv);
     if (recordCache.length === 0) throw new Error('Thailand DIW factory dataset did not contain readable records');
