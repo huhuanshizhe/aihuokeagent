@@ -7,7 +7,7 @@ import { Router } from 'express';
 import { getAdapterStatus, config } from '../config.js';
 import { getAllAdapterCodes } from '../adapters/registry.js';
 
-export const configRouter = Router();
+export const configRouter: Router = Router();
 
 // GET /api/config - 获取配置状态
 configRouter.get('/', (_req, res) => {

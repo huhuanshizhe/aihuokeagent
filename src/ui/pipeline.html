@@ -63,6 +63,7 @@
         <a href="/">扫描</a>
         <a href="/enrich.html">补全</a>
         <a href="/pipeline.html">全流程</a>
+        <a href="/public-scan.html">公开 API</a>
       </nav>
     </div>
   </header>
@@ -139,6 +140,7 @@
     </div>
   </div>
 
+  <script src="/auth.js"></script>
   <script>
     const API = '';
 
@@ -166,7 +168,7 @@
       };
 
       try {
-        const res = await fetch(`${API}/api/pipeline/run`, {
+        const res = await VertaxAuth.apiFetch(`${API}/api/pipeline/run`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
@@ -247,6 +249,8 @@
       div.textContent = str;
       return div.innerHTML;
     }
+
+    VertaxAuth.ensureApiKey(API);
   </script>
 </body>
 </html>

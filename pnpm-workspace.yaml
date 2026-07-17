@@ -1,0 +1,5 @@
+# pnpm 11：允许安装期执行原生/构建脚本的依赖（勿再写 package.json 的 pnpm.onlyBuiltDependencies）
+allowBuilds:
+  esbuild: true
+  sharp: true
+  unrs-resolver: true

@@ -114,6 +114,33 @@ GET    /health                     存活检查
 GET    /ready                      依赖就绪检查
 ```
 
+## 公开扫描 API（vertax 客户端契约）
+
+面向 vertax-local / 外部调用方的精简发现接口。只做 SCAN，不做 ENRICH。
+
+```text
+POST /api/public/scan
+```
+
+请求体：
+
+```json
+{ "keyword": "wedding photography", "country": "泰国" }
+```
+
+约定：
+
+- `keyword`：单个非空字符串（不接受数组）
+- `country`：ISO 码 / 英文名 / 中文名（如 `TH`、`Thailand`、`泰国`）；无法识别返回 400
+- 适配器：固定自动规划（与调试 UI「自动规划数据源」一致）
+- `maxResults`：固定为 20（调用方不可改）
+- 鉴权：与其它业务 API 相同；配置了 `SERVICE_API_KEY` 时需 `Authorization: Bearer <key>` 或 `X-Api-Key`
+- 成功响应：`{ "success": true, "data": { runId, duration, totalFetched, totalFound, totalNew, totalQualified, totalReview, totalRejected, errors, warnings } }`
+- 企业列表请立刻再调：`GET /api/scan/results?runId=...`（扫描是**同步**完成的，返回时结果已落库，**不需要轮询**）
+- 不再返回 `resourcePlan` / `adapterResults` / `rejectedSamples` / `reviewSamples` 等调试字段
+
+本地测试页：`http://localhost:3100/public-scan.html`（顶栏「公开 API」）。
+
 ## Discovery Resource Registry
 
 系统通过版本化资源包积累国家与行业经验：

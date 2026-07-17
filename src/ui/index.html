@@ -53,6 +53,7 @@
         <a href="/">扫描</a>
         <a href="/enrich.html">补全</a>
         <a href="/pipeline.html">全流程</a>
+        <a href="/public-scan.html">公开 API</a>
       </nav>
     </div>
   </header>
@@ -121,6 +122,7 @@
     </div>
   </div>
 
+  <script src="/auth.js"></script>
   <script>
     const API = '';
 
@@ -141,7 +143,7 @@
       }
       box.textContent = '正在生成国家 × 行业资源策略...';
       try {
-        const response = await fetch(`${API}/api/resources/plan`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const response = await VertaxAuth.apiFetch(`${API}/api/resources/plan`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         const result = await response.json();
         if (!result.success) throw new Error(result.error || '规划失败');
         const p = result.data;
@@ -186,7 +188,7 @@
       };
 
       try {
-        const res = await fetch(`${API}/api/scan`, {
+        const res = await VertaxAuth.apiFetch(`${API}/api/scan`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
@@ -212,7 +214,7 @@
 
     async function loadResults(runId) {
       try {
-        const res = await fetch(`${API}/api/scan/results?runId=${runId}`);
+        const res = await VertaxAuth.apiFetch(`${API}/api/scan/results?runId=${runId}`);
         const data = await res.json();
         if (!data.success) return;
 
@@ -255,7 +257,7 @@
     async function loadHistory() {
       showStatus('加载历史记录...', 'info');
       try {
-        const res = await fetch(`${API}/api/scan/runs?limit=10`);
+        const res = await VertaxAuth.apiFetch(`${API}/api/scan/runs?limit=10`);
         const data = await res.json();
         if (!data.success) return;
 
@@ -302,6 +304,8 @@
       div.textContent = str;
       return div.innerHTML;
     }
+
+    VertaxAuth.ensureApiKey(API);
   </script>
 </body>
 </html>

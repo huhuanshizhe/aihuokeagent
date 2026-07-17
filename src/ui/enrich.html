@@ -56,6 +56,7 @@
         <a href="/">扫描</a>
         <a href="/enrich.html">补全</a>
         <a href="/pipeline.html">全流程</a>
+        <a href="/public-scan.html">公开 API</a>
       </nav>
     </div>
   </header>
@@ -101,6 +102,7 @@
     </div>
   </div>
 
+  <script src="/auth.js"></script>
   <script>
     const API = '';
 
@@ -138,7 +140,7 @@
       }
 
       try {
-        const res = await fetch(`${API}/api/enrich`, {
+        const res = await VertaxAuth.apiFetch(`${API}/api/enrich`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
@@ -202,7 +204,7 @@
     async function loadAll() {
       showStatus('加载记录...', 'info');
       try {
-        const res = await fetch(`${API}/api/enrich/results?limit=20`);
+        const res = await VertaxAuth.apiFetch(`${API}/api/enrich/results?limit=20`);
         const data = await res.json();
         if (!data.success) return;
 
@@ -251,6 +253,8 @@
       div.textContent = str;
       return div.innerHTML;
     }
+
+    VertaxAuth.ensureApiKey(API);
   </script>
 </body>
 </html>

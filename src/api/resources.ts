@@ -4,7 +4,7 @@ import { resourceRegistry } from '../resources/registry.js';
 import { buildDiscoveryResourcePlan } from '../resources/planner.js';
 import { applyHistoricalPerformance, getSourceQualityMetrics } from '../resources/metrics.js';
 
-export const resourcesRouter = Router();
+export const resourcesRouter: Router = Router();
 
 resourcesRouter.get('/', (_req, res) => {
   res.json({ success: true, data: {

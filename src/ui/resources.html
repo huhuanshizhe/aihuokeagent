@@ -64,10 +64,11 @@
       </section>
     </section>
   </main>
+  <script src="/auth.js"></script>
   <script>
     let catalog={markets:[],industries:[],sources:[]};let activeTab='sources';
     const esc=value=>String(value??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-    async function api(path,options){const response=await fetch(path,options);const result=await response.json();if(!result.success)throw new Error(result.error||'请求失败');return result.data}
+    async function api(path,options){const response=await VertaxAuth.apiFetch(path,options);const result=await response.json();if(!result.success)throw new Error(result.error||'请求失败');return result.data}
     async function load(){catalog=await api('/api/resources');marketCount.textContent=catalog.markets.length;industryCount.textContent=catalog.industries.length;sourceCount.textContent=catalog.sources.length;country.innerHTML=catalog.markets.map(x=>`<option value="${esc(x.countryCode)}">${esc(x.countryName)} (${esc(x.countryCode)})</option>`).join('');industry.innerHTML=catalog.industries.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('');renderCatalog();await loadMetrics()}
     function badge(status){return `<span class="badge ${esc(status)}">${esc(status)}</span>`}
     function renderCatalog(){
@@ -78,7 +79,8 @@
     async function makePlan(){planOutput.textContent='正在规划...';try{const data=await api('/api/resources/plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({countries:[country.value],industry:industry.value,keywords:keywords.value.split(',').map(v=>v.trim()).filter(Boolean)})});planOutput.textContent=JSON.stringify(data,null,2)}catch(error){planOutput.textContent=`规划失败：${error.message}`}}
     async function loadMetrics(){const rows=await api('/api/resources/metrics');metricsBody.innerHTML=rows.length?rows.map(x=>`<tr><td><strong>${esc(x.sourceCode)}</strong></td><td>${esc(x.countryCode||'—')}</td><td>${esc(x.industryPackId||'—')}</td><td>${x.runs}</td><td>${x.fetched} / ${x.found}</td><td>${Math.round(x.qualificationRate*100)}%</td><td>${(x.avgDurationMs/1000).toFixed(1)}s</td></tr>`).join(''):'<tr><td colspan="7" class="empty">运行发现任务后，这里将出现来源表现。</td></tr>'}
     document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.setAttribute('aria-selected','false'));tab.setAttribute('aria-selected','true');activeTab=tab.dataset.tab;renderCatalog()}));
-    planButton.addEventListener('click',makePlan);reloadButton.addEventListener('click',async()=>{reloadButton.disabled=true;try{await api('/api/resources/reload',{method:'POST'});await load()}finally{reloadButton.disabled=false}});load().catch(error=>{planOutput.textContent=`资源加载失败：${error.message}`});
+    planButton.addEventListener('click',makePlan);reloadButton.addEventListener('click',async()=>{reloadButton.disabled=true;try{await api('/api/resources/reload',{method:'POST'});await load()}finally{reloadButton.disabled=false}});
+    VertaxAuth.ensureApiKey('').then(()=>load()).catch(error=>{planOutput.textContent=`资源加载失败：${error.message}`});
   </script>
 </body>
 </html>

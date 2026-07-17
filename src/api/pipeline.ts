@@ -10,7 +10,7 @@ import { db } from '../db.js';
 import { selectCandidatesForEnrichment } from '../pipeline/candidate-utils.js';
 import { parsePipelineRequest, RequestValidationError } from './validation.js';
 
-export const pipelineRouter = Router();
+export const pipelineRouter: Router = Router();
 
 interface PipelineResult {
   scanResult: {

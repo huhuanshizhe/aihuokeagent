@@ -8,7 +8,7 @@
 import { Router } from 'express';
 import { runScan, getScanResults, getScanRun, listScanRuns, type ScanOptions } from '../scan/scanner.js';
 
-export const scanRouter = Router();
+export const scanRouter: Router = Router();
 
 // POST /api/scan - 执行扫描
 scanRouter.post('/', async (req, res) => {

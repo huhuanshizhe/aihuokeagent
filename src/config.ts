@@ -18,6 +18,8 @@ export interface AppConfig {
   service: {
     apiKey: string;
     corsOrigins: string[];
+    /** Local test UI only: allow /api/health to return apiKey for prefill. Never enable in public production. */
+    exposeApiKeyInUi: boolean;
   };
   ai: {
     apiKey: string;
@@ -44,6 +46,7 @@ export const config: AppConfig = {
   service: {
     apiKey: env('SERVICE_API_KEY'),
     corsOrigins: env('CORS_ORIGINS').split(',').map(value => value.trim()).filter(Boolean),
+    exposeApiKeyInUi: ['1', 'true', 'yes', 'on'].includes(env('EXPOSE_API_KEY_IN_UI').toLowerCase()),
   },
   ai: {
     // Prefer Alibaba Cloud Model Studio's official variable names while keeping

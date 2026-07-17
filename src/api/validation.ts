@@ -1,4 +1,5 @@
 import { getAllAdapterCodes, getAdapter } from '../adapters/registry.js';
+import { normalizeCountryCode } from '../lib/country-utils.js';
 import type { ScanOptions } from '../scan/scanner.js';
 
 export class RequestValidationError extends Error {
@@ -16,6 +17,17 @@ export interface PipelineRequest extends ScanOptions {
   skipDecisionMakers?: boolean;
 }
 
+/** Fixed defaults for the public scan contract (vertax / external clients). */
+export const PUBLIC_SCAN_MAX_RESULTS = 20;
+
+export interface PublicScanRequest {
+  keyword: string;
+  country: string;
+  /** ISO country code after normalization */
+  countryCode: string;
+  maxResults: number;
+}
+
 function stringArray(value: unknown, field: string): string[] | undefined {
   if (value === undefined) return undefined;
   if (!Array.isArray(value) || value.some(item => typeof item !== 'string')) {
@@ -31,6 +43,55 @@ function boundedInteger(value: unknown, fallback: number, min: number, max: numb
     throw new RequestValidationError(`${field} must be an integer between ${min} and ${max}`);
   }
   return value as number;
+}
+
+/**
+ * Public discover contract: one keyword + one country.
+ * Adapters are always auto-planned; maxResults is fixed at PUBLIC_SCAN_MAX_RESULTS.
+ */
+export function parsePublicScanRequest(body: unknown): PublicScanRequest {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw new RequestValidationError('Request body must be a JSON object');
+  }
+  const input = body as Record<string, unknown>;
+
+  if (typeof input.keyword !== 'string') {
+    throw new RequestValidationError('keyword must be a non-empty string');
+  }
+  const keyword = input.keyword.trim();
+  if (!keyword) {
+    throw new RequestValidationError('keyword must be a non-empty string');
+  }
+
+  if (typeof input.country !== 'string') {
+    throw new RequestValidationError('country must be a non-empty string');
+  }
+  const country = input.country.trim();
+  if (!country) {
+    throw new RequestValidationError('country must be a non-empty string');
+  }
+  const countryCode = normalizeCountryCode(country);
+  if (!countryCode) {
+    throw new RequestValidationError(`Unrecognized country: ${country}`, [
+      'Use an ISO code (e.g. TH), English name (e.g. Thailand), or Chinese name (e.g. 泰国)',
+    ]);
+  }
+
+  return {
+    keyword,
+    country,
+    countryCode,
+    maxResults: PUBLIC_SCAN_MAX_RESULTS,
+  };
+}
+
+export function publicScanToScanOptions(parsed: PublicScanRequest): ScanOptions {
+  return {
+    keywords: [parsed.keyword],
+    countries: [parsed.countryCode],
+    maxResults: parsed.maxResults,
+    // adapters omitted → automatic resource planning
+  };
 }
 
 export function parsePipelineRequest(body: unknown): PipelineRequest {

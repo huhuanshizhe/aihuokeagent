@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 获客 - 公开扫描 API</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px 0; margin-bottom: 24px; }
+    header .container { display: flex; justify-content: space-between; align-items: center; }
+    header h1 { font-size: 24px; font-weight: 600; }
+    nav a { color: white; text-decoration: none; margin-left: 20px; opacity: 0.9; }
+    nav a:hover { opacity: 1; }
+    nav a.active { opacity: 1; font-weight: 600; text-decoration: underline; }
+    .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .card h2 { font-size: 18px; margin-bottom: 16px; color: #444; }
+    .form-row { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+    .form-group { flex: 1; min-width: 200px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: #666; }
+    .form-group input { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; }
+    .hint { font-size: 13px; color: #667085; line-height: 1.6; margin-bottom: 16px; }
+    .hint code { background: #f0f0f0; padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+    .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+    .card-head h2 { margin-bottom: 0; }
+    .auth-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid transparent; }
+    .auth-badge.loading { background: #f3f4f6; color: #6b7280; border-color: #e5e7eb; }
+    .auth-badge.on { background: #e8f5e9; color: #2e7d32; border-color: #c8e6c9; }
+    .auth-badge.off { background: #fff8e1; color: #f57f17; border-color: #ffe082; }
+    .auth-badge.err { background: #ffebee; color: #c62828; border-color: #ffcdd2; }
+    .auth-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+    .btn { padding: 10px 24px; border: none; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+    .btn-primary { background: #667eea; color: white; }
+    .btn-primary:hover { background: #5a6fd6; }
+    .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
+    .status-bar { padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; }
+    .status-info { background: #e3f2fd; color: #1565c0; }
+    .status-success { background: #e8f5e9; color: #2e7d32; }
+    .status-error { background: #ffebee; color: #c62828; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+    th { font-size: 13px; font-weight: 600; color: #666; background: #fafafa; }
+    td { font-size: 14px; }
+    tr:hover { background: #f9f9f9; }
+    .score { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+    .score-high { background: #e8f5e9; color: #2e7d32; }
+    .score-mid { background: #fff3e0; color: #ef6c00; }
+    .score-low { background: #fafafa; color: #999; }
+    #results-section { display: none; }
+    .loading { text-align: center; padding: 40px; color: #999; }
+    pre.payload { background: #FCFAF7; border: 1px solid #E8E0D0; border-radius: 8px; padding: 12px; font-size: 12px; overflow: auto; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <h1>🔍 AI 获客系统</h1>
+      <nav>
+        <a href="/">扫描</a>
+        <a href="/enrich.html">补全</a>
+        <a href="/pipeline.html">全流程</a>
+        <a href="/public-scan.html" class="active">公开 API</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="card">
+      <div class="card-head">
+        <h2>公开扫描 API 测试</h2>
+        <span id="authBadge" class="auth-badge loading" title="来自 GET /api/health 的 authRequired">
+          <span class="auth-dot"></span>
+          <span id="authBadgeText">检测 SERVICE_API_KEY…</span>
+        </span>
+      </div>
+      <p class="hint">
+        客户端流程（同步，不轮询）：① <code>POST /api/public/scan</code> 拿到 <code>runId</code> 与摘要 →
+        ② 立刻 <code>GET /api/scan/results?runId=...</code> 拉企业列表。
+        适配器固定自动规划，每适配器最大结果数固定为 20。若配置了 <code>SERVICE_API_KEY</code>，两步请求都需带 Bearer / X-Api-Key。
+      </p>
+      <div class="form-row">
+        <div class="form-group">
+          <label>搜索关键词</label>
+          <input type="text" id="keyword" placeholder="例：wedding photography" value="wedding photography">
+        </div>
+        <div class="form-group">
+          <label>目标国家</label>
+          <input type="text" id="country" placeholder="例：泰国 / TH / Thailand" value="泰国">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>SERVICE_API_KEY（已配置鉴权时必填，仅保存在本页 sessionStorage）</label>
+          <input type="password" id="apiKey" placeholder="与 .env 中 SERVICE_API_KEY 一致" autocomplete="off">
+        </div>
+      </div>
+      <button class="btn btn-primary" id="runBtn" onclick="runPublicScan()">🚀 调用公开扫描</button>
+      <pre class="payload" id="requestPreview"></pre>
+    </div>
+
+    <div id="statusBar" class="status-bar status-info" style="display:none"></div>
+
+    <div id="results-section" class="card">
+      <h2>扫描结果 <span id="resultCount" style="color:#999;font-size:14px"></span></h2>
+      <div id="resultsContent">
+        <div class="loading">等待调用...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = '';
+    const API_KEY_STORAGE = 'vertax.public_scan.api_key';
+
+    function getApiKey() {
+      return document.getElementById('apiKey').value.trim();
+    }
+
+    function authHeaders(extra) {
+      const headers = Object.assign({ 'Content-Type': 'application/json' }, extra || {});
+      const key = getApiKey();
+      if (key) headers['X-Api-Key'] = key;
+      return headers;
+    }
+
+    const savedKey = sessionStorage.getItem(API_KEY_STORAGE) || '';
+    if (savedKey) document.getElementById('apiKey').value = savedKey;
+    document.getElementById('apiKey').addEventListener('change', () => {
+      const key = getApiKey();
+      if (key) sessionStorage.setItem(API_KEY_STORAGE, key);
+      else sessionStorage.removeItem(API_KEY_STORAGE);
+    });
+
+    function updatePreview() {
+      const body = {
+        keyword: document.getElementById('keyword').value.trim(),
+        country: document.getElementById('country').value.trim(),
+      };
+      document.getElementById('requestPreview').textContent =
+        'POST /api/public/scan\n' + JSON.stringify(body, null, 2);
+    }
+
+    document.getElementById('keyword').addEventListener('input', updatePreview);
+    document.getElementById('country').addEventListener('input', updatePreview);
+    updatePreview();
+
+    async function loadAuthStatus() {
+      const badge = document.getElementById('authBadge');
+      const text = document.getElementById('authBadgeText');
+      const apiKeyInput = document.getElementById('apiKey');
+      try {
+        const res = await fetch(`${API}/api/health`, { cache: 'no-store' });
+        const data = await res.json();
+        const required = Boolean(data.authRequired);
+        badge.className = 'auth-badge ' + (required ? 'on' : 'off');
+        text.textContent = required
+          ? 'SERVICE_API_KEY 已配置（请求需鉴权）'
+          : 'SERVICE_API_KEY 未配置（本地可直接调用）';
+
+        // Prefer server-provided key (EXPOSE_API_KEY_IN_UI), else keep sessionStorage value.
+        if (typeof data.apiKey === 'string' && data.apiKey.trim()) {
+          apiKeyInput.value = data.apiKey.trim();
+          sessionStorage.setItem(API_KEY_STORAGE, apiKeyInput.value);
+        } else if (!apiKeyInput.value) {
+          const saved = sessionStorage.getItem(API_KEY_STORAGE) || '';
+          if (saved) apiKeyInput.value = saved;
+        }
+      } catch (e) {
+        badge.className = 'auth-badge err';
+        text.textContent = '无法检测 SERVICE_API_KEY 状态';
+      }
+    }
+    loadAuthStatus();
+
+    function showStatus(msg, type) {
+      const el = document.getElementById('statusBar');
+      el.style.display = 'block';
+      el.className = 'status-bar status-' + type;
+      el.textContent = msg;
+    }
+
+    function esc(s) {
+      const d = document.createElement('div');
+      d.textContent = s == null ? '' : String(s);
+      return d.innerHTML;
+    }
+
+    async function runPublicScan() {
+      const btn = document.getElementById('runBtn');
+      const keyword = document.getElementById('keyword').value.trim();
+      const country = document.getElementById('country').value.trim();
+      if (!keyword || !country) {
+        showStatus('请填写关键词和目标国家', 'error');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = '⏳ 扫描中...';
+      showStatus('① 正在调用 POST /api/public/scan（同步等待扫描完成）...', 'info');
+      document.getElementById('results-section').style.display = 'none';
+
+      try {
+        const res = await fetch(`${API}/api/public/scan`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ keyword, country }),
+        });
+        const raw = await res.text();
+        let data;
+        try {
+          data = JSON.parse(raw);
+        } catch {
+          showStatus(
+            `❌ 接口返回非 JSON（HTTP ${res.status}）。请重启 aihuokeagent 服务后再试。预览: ${raw.slice(0, 120).replace(/\s+/g, ' ')}`,
+            'error',
+          );
+          return;
+        }
+
+        if (data.success) {
+          const r = data.data;
+          showStatus(
+            `① 扫描完成 runId=${r.runId}：抓取 ${r.totalFetched ?? r.totalFound}，合格 ${r.totalQualified ?? 0}，待验证 ${r.totalReview ?? 0}，过滤 ${r.totalRejected ?? 0}，新增 ${r.totalNew ?? 0}，耗时 ${((r.duration || 0) / 1000).toFixed(1)}s。② 立即拉取结果…`,
+            'info',
+          );
+          if (r.errors?.length) {
+            showStatus(`⚠️ 部分错误: ${r.errors.join('; ')}`, 'error');
+          } else if (r.warnings?.length) {
+            showStatus(`⚠️ Provider 警告: ${r.warnings.join('; ')}`, 'error');
+          }
+          await loadResults(r.runId);
+        } else {
+          const detail = data.details?.length ? `（${data.details.join('; ')}）` : '';
+          showStatus(`❌ 失败 (${res.status}): ${data.error || 'unknown'}${detail}`, 'error');
+        }
+      } catch (e) {
+        showStatus(`❌ 请求失败: ${e.message}`, 'error');
+      }
+
+      btn.disabled = false;
+      btn.textContent = '🚀 调用公开扫描';
+    }
+
+    async function loadResults(runId) {
+      try {
+        const res = await fetch(`${API}/api/scan/results?runId=${encodeURIComponent(runId)}`, {
+          headers: authHeaders(),
+        });
+        const data = await res.json();
+        if (!data.success) {
+          showStatus(`❌ 拉取结果失败: ${data.error || 'unknown'}`, 'error');
+          return;
+        }
+
+        const candidates = data.data.candidates || [];
+        document.getElementById('resultCount').textContent = `(${candidates.length} 个)`;
+        document.getElementById('results-section').style.display = 'block';
+        showStatus(`② 已拉取企业列表：${candidates.length} 家（runId=${runId}）`, 'success');
+
+        if (candidates.length === 0) {
+          document.getElementById('resultsContent').innerHTML = '<div class="loading">未发现企业</div>';
+          return;
+        }
+
+        let html = '<table><thead><tr><th>企业名</th><th>国家</th><th>行业</th><th>网站</th><th>资格</th><th>评分</th></tr></thead><tbody>';
+        for (const c of candidates) {
+          const scoreClass = c.matchScore >= 0.7 ? 'score-high' : c.matchScore >= 0.4 ? 'score-mid' : 'score-low';
+          const score = c.matchScore ? (c.matchScore * 100).toFixed(0) : '-';
+          let host = '-';
+          if (c.website) {
+            try { host = new URL(c.website).hostname; } catch { host = c.website; }
+          }
+          html += `<tr>
+            <td><strong>${esc(c.displayName)}</strong></td>
+            <td>${esc(c.country || '-')}</td>
+            <td>${esc(c.industry || '-')}</td>
+            <td>${c.website ? `<a href="${esc(c.website)}" target="_blank" rel="noopener">${esc(host)}</a>` : '-'}</td>
+            <td>${c.qualificationTier === 'qualified' ? '✅ 合格' : c.qualificationTier === 'review' ? '🟡 待验证' : '—'}</td>
+            <td><span class="score ${scoreClass}">${score}</span></td>
+          </tr>`;
+        }
+        html += '</tbody></table>';
+        document.getElementById('resultsContent').innerHTML = html;
+      } catch (e) {
+        showStatus(`❌ 拉取结果失败: ${e.message}`, 'error');
+        console.error('Load results failed:', e);
+      }
+    }
+  </script>
+</body>
+</html>

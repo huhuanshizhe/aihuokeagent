@@ -7,7 +7,7 @@
 import { Router } from 'express';
 import { runEnrich, getEnrichment, listEnrichments, getEnrichmentsByCandidate, type EnrichOptions } from '../enrich/contact-engine.js';
 
-export const enrichRouter = Router();
+export const enrichRouter: Router = Router();
 
 // POST /api/enrich - 执行情报补全
 enrichRouter.post('/', async (req, res) => {
