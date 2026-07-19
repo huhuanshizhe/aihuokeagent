@@ -124,17 +124,28 @@ POST /api/public/scan
 请求体：
 
 ```json
-{ "keyword": "wedding photography", "country": "泰国" }
+{
+  "keyword": "wedding photography",
+  "country": "泰国",
+  "clientContext": {
+    "clientApp": "vertax-local",
+    "authenticated": true,
+    "userId": "...",
+    "discoveryRunId": "..."
+  }
+}
 ```
 
 约定：
 
 - `keyword`：单个非空字符串（不接受数组）
 - `country`：ISO 码 / 英文名 / 中文名（如 `TH`、`Thailand`、`泰国`）；无法识别返回 400
+- `clientContext`：可选对象，供 vertax 客户端透传登录/授权审计信息；不影响扫描逻辑，会写入本次 `scan_runs.diagnostics`
 - 适配器：固定自动规划（与调试 UI「自动规划数据源」一致）
 - `maxResults`：固定为 20（调用方不可改）
 - 鉴权：与其它业务 API 相同；配置了 `SERVICE_API_KEY` 时需 `Authorization: Bearer <key>` 或 `X-Api-Key`
-- 成功响应一次返回：`{ "success": true, "data": { runId, duration, totalFetched, totalFound, totalNew, totalQualified, totalReview, totalRejected, errors, warnings, candidates } }`
+- 成功响应一次返回：`{ "success": true, "data": { runId, duration, totalFetched, totalFound, totalNew, totalQualified, totalReview, totalRejected, errors, warnings, candidates, acceptedClientContext } }`
+- 调用审计：每次 public scan 写入 `public_scan_call_logs`；管理页 `/public-scan-logs.html`（`GET /api/public/scan/logs` 分页列表，`GET /api/public/scan/logs/:id` 详情）
 - **无需**再调 `GET /api/scan/results`；普通 `POST /api/scan` 同样直接带 `candidates`
 - `GET /api/scan/results?runId=` 仅用于回看历史（如调试页「历史记录」）
 - 公开接口不返回 `resourcePlan` / `adapterResults` / samples 等调试字段

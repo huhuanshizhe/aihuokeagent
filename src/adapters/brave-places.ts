@@ -88,6 +88,7 @@ export class BravePlacesAdapter implements Adapter {
             searchKeyword: group.plan.sourceKeyword,
             sourceMatchedKeywords: [group.plan.sourceKeyword],
             marketSegment: group.plan.marketSegment,
+            categories: place.categories,
             rating: place.rating?.ratingValue,
             reviewCount: place.rating?.reviewCount,
             lat: place.coordinates?.[0],

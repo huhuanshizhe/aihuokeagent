@@ -177,3 +177,41 @@ export const discoverySourceRuns = pgTable(
     ),
   }),
 );
+
+/** Public scan API call audit logs (vertax client) */
+export const publicScanCallLogs = pgTable(
+  'public_scan_call_logs',
+  {
+    id: text('id').primaryKey(),
+    createdAt: text('created_at').notNull(),
+    runId: text('run_id'),
+    keyword: text('keyword').notNull(),
+    country: text('country').notNull(),
+    countryCode: text('country_code'),
+    resultCount: integer('result_count').default(0),
+    totalQualified: integer('total_qualified').default(0),
+    totalReview: integer('total_review').default(0),
+    durationMs: integer('duration_ms').default(0),
+    success: boolean('success').notNull().default(true),
+    errorMessage: text('error_message'),
+    userId: text('user_id'),
+    userName: text('user_name'),
+    userEmail: text('user_email'),
+    userPhone: text('user_phone'),
+    userCompany: text('user_company'),
+    licenseCode: text('license_code'),
+    licenseExpiresAt: text('license_expires_at'),
+    monthlyLeadsRemaining: integer('monthly_leads_remaining'),
+    clientApp: text('client_app'),
+    discoveryRunId: text('discovery_run_id'),
+    triggerSource: text('trigger_source'),
+    clientContextJson: text('client_context_json'),
+  },
+  (table) => ({
+    createdAtIdx: index('idx_public_scan_logs_created_at').on(table.createdAt),
+    createdAtIdIdx: index('idx_public_scan_logs_created_at_id').on(table.createdAt, table.id),
+    userIdIdx: index('idx_public_scan_logs_user_id').on(table.userId),
+    keywordIdx: index('idx_public_scan_logs_keyword').on(table.keyword),
+    countryCodeIdx: index('idx_public_scan_logs_country_code').on(table.countryCode),
+  }),
+);

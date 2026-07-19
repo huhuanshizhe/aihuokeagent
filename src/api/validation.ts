@@ -26,6 +26,8 @@ export interface PublicScanRequest {
   /** ISO country code after normalization */
   countryCode: string;
   maxResults: number;
+  /** Optional vertax client audit context; ignored for scan logic */
+  clientContext?: Record<string, unknown>;
 }
 
 function stringArray(value: unknown, field: string): string[] | undefined {
@@ -77,11 +79,24 @@ export function parsePublicScanRequest(body: unknown): PublicScanRequest {
     ]);
   }
 
+  let clientContext: Record<string, unknown> | undefined;
+  if (input.clientContext !== undefined) {
+    if (
+      !input.clientContext
+      || typeof input.clientContext !== 'object'
+      || Array.isArray(input.clientContext)
+    ) {
+      throw new RequestValidationError('clientContext must be a JSON object when provided');
+    }
+    clientContext = { ...(input.clientContext as Record<string, unknown>) };
+  }
+
   return {
     keyword,
     country,
     countryCode,
     maxResults: PUBLIC_SCAN_MAX_RESULTS,
+    clientContext,
   };
 }
 
@@ -91,6 +106,7 @@ export function publicScanToScanOptions(parsed: PublicScanRequest): ScanOptions 
     countries: [parsed.countryCode],
     maxResults: parsed.maxResults,
     // adapters omitted → automatic resource planning
+    clientContext: parsed.clientContext,
   };
 }
 

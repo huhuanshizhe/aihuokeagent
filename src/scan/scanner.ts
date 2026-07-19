@@ -18,6 +18,7 @@ import type { SearchQuery, NormalizedCandidate } from '../adapters/types.js';
 import { buildCandidateIdentity } from '../pipeline/candidate-utils.js';
 import { getProviderQueryBudget, normalizeDiscoveryOptions } from './discovery-query.js';
 import { qualifyDiscoveredCandidate } from './qualifier.js';
+import { ensureDescription } from './description.js';
 import { buildDiscoveryResourcePlan } from '../resources/planner.js';
 import { applyHistoricalPerformanceAsync, recordSourceRun } from '../resources/metrics.js';
 import type { DiscoveryResourcePlan } from '../resources/types.js';
@@ -32,6 +33,8 @@ export interface ScanOptions {
   companyIntro?: string;
   products?: string[];
   negativeKeywords?: string[];
+  /** Optional client audit context from public scan callers */
+  clientContext?: Record<string, unknown>;
 }
 
 export interface RejectedCandidateSummary {
@@ -129,7 +132,10 @@ export async function runScan(options: ScanOptions): Promise<ScanResult> {
 
     await db.update(scanRuns).set({
       keywords: JSON.stringify(keywords),
-      diagnostics: JSON.stringify({ resourcePlan }),
+      diagnostics: JSON.stringify({
+        resourcePlan,
+        ...(options.clientContext ? { clientContext: options.clientContext } : {}),
+      }),
     }).where(eq(scanRuns.id, runId));
 
     const configuredDefaults = getDefaultDiscoveryAdapterCodes(options.countries);
@@ -159,7 +165,7 @@ export async function runScan(options: ScanOptions): Promise<ScanResult> {
         console.log(`[scanner] Running adapter: ${adapterCode}`);
         const result = await adapter.search(query);
 
-        const items = result.items;
+        const items = result.items.map(ensureDescription);
         const rawFetched = result.metadata.rawFetched ?? items.length;
         const providerFiltered = Math.max(0, rawFetched - items.length);
         const qualified = items.map(item => qualifyDiscoveredCandidate(item, query));
@@ -264,7 +270,14 @@ export async function runScan(options: ScanOptions): Promise<ScanResult> {
       totalReview,
       totalDeferred,
       errors: JSON.stringify(errors),
-      diagnostics: JSON.stringify({ resourcePlan, adapterResults, warnings, rejectedSamples, reviewSamples }),
+      diagnostics: JSON.stringify({
+        resourcePlan,
+        adapterResults,
+        warnings,
+        rejectedSamples,
+        reviewSamples,
+        ...(options.clientContext ? { clientContext: options.clientContext } : {}),
+      }),
       completedAt: nowIso(),
     }).where(eq(scanRuns.id, runId));
 

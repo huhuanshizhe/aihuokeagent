@@ -4,63 +4,23 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI 获客 - 公开扫描 API</title>
+  <link rel="stylesheet" href="/theme.css">
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; }
-    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
-    header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px 0; margin-bottom: 24px; }
-    header .container { display: flex; justify-content: space-between; align-items: center; }
-    header h1 { font-size: 24px; font-weight: 600; }
-    nav a { color: white; text-decoration: none; margin-left: 20px; opacity: 0.9; }
-    nav a:hover { opacity: 1; }
-    nav a.active { opacity: 1; font-weight: 600; text-decoration: underline; }
-    .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-    .card h2 { font-size: 18px; margin-bottom: 16px; color: #444; }
-    .form-row { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
-    .form-group { flex: 1; min-width: 200px; }
-    .form-group label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: #666; }
-    .form-group input { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; }
-    .hint { font-size: 13px; color: #667085; line-height: 1.6; margin-bottom: 16px; }
-    .hint code { background: #f0f0f0; padding: 1px 6px; border-radius: 4px; font-size: 12px; }
-    .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-    .card-head h2 { margin-bottom: 0; }
-    .auth-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid transparent; }
-    .auth-badge.loading { background: #f3f4f6; color: #6b7280; border-color: #e5e7eb; }
-    .auth-badge.on { background: #e8f5e9; color: #2e7d32; border-color: #c8e6c9; }
-    .auth-badge.off { background: #fff8e1; color: #f57f17; border-color: #ffe082; }
-    .auth-badge.err { background: #ffebee; color: #c62828; border-color: #ffcdd2; }
-    .auth-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
-    .btn { padding: 10px 24px; border: none; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
-    .btn-primary { background: #667eea; color: white; }
-    .btn-primary:hover { background: #5a6fd6; }
-    .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
-    .status-bar { padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; }
-    .status-info { background: #e3f2fd; color: #1565c0; }
-    .status-success { background: #e8f5e9; color: #2e7d32; }
-    .status-error { background: #ffebee; color: #c62828; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
-    th { font-size: 13px; font-weight: 600; color: #666; background: #fafafa; }
-    td { font-size: 14px; }
-    tr:hover { background: #f9f9f9; }
-    .score { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 500; }
-    .score-high { background: #e8f5e9; color: #2e7d32; }
-    .score-mid { background: #fff3e0; color: #ef6c00; }
-    .score-low { background: #fafafa; color: #999; }
     #results-section { display: none; }
-    .loading { text-align: center; padding: 40px; color: #999; }
-    pre.payload { background: #FCFAF7; border: 1px solid #E8E0D0; border-radius: 8px; padding: 12px; font-size: 12px; overflow: auto; margin-top: 12px; }
+    pre.payload { margin-top: 12px; }
   </style>
 </head>
 <body>
-  <header>
+  <header class="app-header">
     <div class="container">
-      <h1>🔍 AI 获客系统</h1>
+      <h1>AI 获客系统</h1>
       <nav>
         <a href="/">扫描</a>
         <a href="/enrich.html">补全</a>
         <a href="/pipeline.html">全流程</a>
         <a href="/public-scan.html" class="active">公开 API</a>
+        <a href="/public-scan-logs.html">调用记录</a>
+        <a href="/resources.html">资源中心</a>
       </nav>
     </div>
   </header>
@@ -69,10 +29,13 @@
     <div class="card">
       <div class="card-head">
         <h2>公开扫描 API 测试</h2>
-        <span id="authBadge" class="auth-badge loading" title="来自 GET /api/health 的 authRequired">
-          <span class="auth-dot"></span>
-          <span id="authBadgeText">检测 SERVICE_API_KEY…</span>
-        </span>
+        <div class="actions">
+          <a class="btn btn-secondary" href="/public-scan-logs.html">查看调用记录</a>
+          <span id="authBadge" class="auth-badge loading" title="来自 GET /api/health 的 authRequired">
+            <span class="auth-dot"></span>
+            <span id="authBadgeText">检测 SERVICE_API_KEY…</span>
+          </span>
+        </div>
       </div>
       <p class="hint">
         一次请求完成：<code>POST /api/public/scan</code> 同步扫描并直接返回摘要 + <code>candidates</code> 企业列表（无需再调 results）。
@@ -94,14 +57,14 @@
           <input type="password" id="apiKey" placeholder="与 .env 中 SERVICE_API_KEY 一致" autocomplete="off">
         </div>
       </div>
-      <button class="btn btn-primary" id="runBtn" onclick="runPublicScan()">🚀 调用公开扫描</button>
+      <button class="btn btn-primary" id="runBtn" onclick="runPublicScan()">调用公开扫描</button>
       <pre class="payload" id="requestPreview"></pre>
     </div>
 
     <div id="statusBar" class="status-bar status-info" style="display:none"></div>
 
     <div id="results-section" class="card">
-      <h2>扫描结果 <span id="resultCount" style="color:#999;font-size:14px"></span></h2>
+      <h2>扫描结果 <span id="resultCount" style="color:#64748b;font-size:13px;font-weight:500"></span></h2>
       <div id="resultsContent">
         <div class="loading">等待调用...</div>
       </div>
@@ -195,7 +158,7 @@
       }
 
       btn.disabled = true;
-      btn.textContent = '⏳ 扫描中...';
+      btn.textContent = '扫描中...';
       showStatus('正在调用 POST /api/public/scan（一次返回企业列表）...', 'info');
       document.getElementById('results-section').style.display = 'none';
 
@@ -211,7 +174,7 @@
           data = JSON.parse(raw);
         } catch {
           showStatus(
-            `❌ 接口返回非 JSON（HTTP ${res.status}）。请重启 aihuokeagent 服务后再试。预览: ${raw.slice(0, 120).replace(/\s+/g, ' ')}`,
+            `接口返回非 JSON（HTTP ${res.status}）。请重启 aihuokeagent 服务后再试。预览: ${raw.slice(0, 120).replace(/\s+/g, ' ')}`,
             'error',
           );
           return;
@@ -221,22 +184,22 @@
           const r = data.data;
           const candidates = r.candidates || [];
           showStatus(
-            `✅ 扫描完成：抓取 ${r.totalFetched ?? r.totalFound}，合格 ${r.totalQualified ?? 0}，待验证 ${r.totalReview ?? 0}，过滤 ${r.totalRejected ?? 0}，企业 ${candidates.length} 家，耗时 ${((r.duration || 0) / 1000).toFixed(1)}s`,
+            `扫描完成：抓取 ${r.totalFetched ?? r.totalFound}，合格 ${r.totalQualified ?? 0}，待验证 ${r.totalReview ?? 0}，过滤 ${r.totalRejected ?? 0}，企业 ${candidates.length} 家，耗时 ${((r.duration || 0) / 1000).toFixed(1)}s`,
             'success',
           );
-          if (r.errors?.length) showStatus(`⚠️ 部分错误: ${r.errors.join('; ')}`, 'error');
-          else if (r.warnings?.length) showStatus(`⚠️ Provider 警告: ${r.warnings.join('; ')}`, 'error');
+          if (r.errors?.length) showStatus(`部分错误: ${r.errors.join('; ')}`, 'error');
+          else if (r.warnings?.length) showStatus(`Provider 警告: ${r.warnings.join('; ')}`, 'error');
           renderCandidates(candidates);
         } else {
           const detail = data.details?.length ? `（${data.details.join('; ')}）` : '';
-          showStatus(`❌ 失败 (${res.status}): ${data.error || 'unknown'}${detail}`, 'error');
+          showStatus(`失败 (${res.status}): ${data.error || 'unknown'}${detail}`, 'error');
         }
       } catch (e) {
-        showStatus(`❌ 请求失败: ${e.message}`, 'error');
+        showStatus(`请求失败: ${e.message}`, 'error');
       }
 
       btn.disabled = false;
-      btn.textContent = '🚀 调用公开扫描';
+      btn.textContent = '调用公开扫描';
     }
 
     function renderCandidates(candidates) {
@@ -248,7 +211,7 @@
         return;
       }
 
-      let html = '<table><thead><tr><th>企业名</th><th>国家</th><th>行业</th><th>网站</th><th>资格</th><th>评分</th></tr></thead><tbody>';
+      let html = '<div class="table-shell"><div class="table-wrap"><table><thead><tr><th>企业名</th><th>国家</th><th>行业</th><th>网站</th><th>资格</th><th>评分</th></tr></thead><tbody>';
       for (const c of candidates) {
         const scoreClass = c.matchScore >= 0.7 ? 'score-high' : c.matchScore >= 0.4 ? 'score-mid' : 'score-low';
         const score = c.matchScore ? (c.matchScore * 100).toFixed(0) : '-';
@@ -261,11 +224,11 @@
           <td>${esc(c.country || '-')}</td>
           <td>${esc(c.industry || '-')}</td>
           <td>${c.website ? `<a href="${esc(c.website)}" target="_blank" rel="noopener">${esc(host)}</a>` : '-'}</td>
-          <td>${c.qualificationTier === 'qualified' ? '✅ 合格' : c.qualificationTier === 'review' ? '🟡 待验证' : '—'}</td>
+          <td>${c.qualificationTier === 'qualified' ? '合格' : c.qualificationTier === 'review' ? '待验证' : '—'}</td>
           <td><span class="score ${scoreClass}">${score}</span></td>
         </tr>`;
       }
-      html += '</tbody></table>';
+      html += '</tbody></table></div></div>';
       document.getElementById('resultsContent').innerHTML = html;
     }
   </script>

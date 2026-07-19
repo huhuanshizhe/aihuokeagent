@@ -13,6 +13,8 @@ interface PlaceResult {
   formattedAddress?: string;
   location?: { latitude: number; longitude: number };
   types?: string[];
+  primaryType?: string;
+  primaryTypeDisplayName?: { text: string };
   businessStatus?: string;
   rating?: number;
   userRatingCount?: number;
@@ -21,13 +23,18 @@ interface PlaceResult {
   internationalPhoneNumber?: string;
   googleMapsUri?: string;
   editorialSummary?: { text: string };
+  generativeSummary?: {
+    overview?: { text: string };
+    description?: { text: string };
+  };
 }
 
 const FIELD_MASK = [
   'places.id','places.displayName','places.formattedAddress','places.location',
-  'places.types','places.businessStatus','places.rating','places.userRatingCount',
+  'places.types','places.primaryType','places.primaryTypeDisplayName',
+  'places.businessStatus','places.rating','places.userRatingCount',
   'places.websiteUri','places.nationalPhoneNumber','places.internationalPhoneNumber',
-  'places.googleMapsUri','places.editorialSummary',
+  'places.googleMapsUri','places.editorialSummary','places.generativeSummary',
 ].join(',');
 
 export class GooglePlacesAdapter implements Adapter {
@@ -139,19 +146,25 @@ export class GooglePlacesAdapter implements Adapter {
     const countryPart = addressParts.length > 0 ? addressParts[addressParts.length - 1] : undefined;
     const city = addressParts.length > 1 ? addressParts[addressParts.length - 2] : undefined;
     const targetCountry = query.countries?.length === 1 ? getCountryDisplayName(query.countries[0]) : undefined;
+    const primaryTypeLabel = place.primaryTypeDisplayName?.text?.trim();
+    const description =
+      place.editorialSummary?.text?.trim()
+      || place.generativeSummary?.overview?.text?.trim()
+      || place.generativeSummary?.description?.text?.trim()
+      || undefined;
 
     return {
       externalId: place.id,
       sourceUrl: place.googleMapsUri || `https://www.google.com/maps/place/?q=place_id:${place.id}`,
       displayName: place.displayName?.text || 'Unknown',
       candidateType: 'COMPANY',
-      description: place.editorialSummary?.text,
+      description,
       website: place.websiteUri,
       phone: place.internationalPhoneNumber || place.nationalPhoneNumber,
       address: place.formattedAddress,
       country: targetCountry || getCountryDisplayName(countryPart) || countryPart,
       city,
-      industry: this.inferIndustry(place.types || []),
+      industry: primaryTypeLabel || this.inferIndustry(place.types || []),
       matchExplain: {
         channel: 'google_places',
         reasons: [
@@ -164,7 +177,10 @@ export class GooglePlacesAdapter implements Adapter {
         source: 'google_places',
         place_id: place.id,
         types: place.types,
+        primaryType: place.primaryType,
+        primaryTypeDisplayName: primaryTypeLabel,
         rating: place.rating,
+        userRatingCount: place.userRatingCount,
         lat: place.location?.latitude,
         lng: place.location?.longitude,
       },

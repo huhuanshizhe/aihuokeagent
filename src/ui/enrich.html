@@ -4,59 +4,22 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI 获客 - 情报补全</title>
+  <link rel="stylesheet" href="/theme.css">
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; }
-    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
-    header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px 0; margin-bottom: 24px; }
-    header .container { display: flex; justify-content: space-between; align-items: center; }
-    header h1 { font-size: 24px; font-weight: 600; }
-    nav a { color: white; text-decoration: none; margin-left: 20px; opacity: 0.9; }
-    nav a:hover { opacity: 1; }
-    .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-    .card h2 { font-size: 18px; margin-bottom: 16px; color: #444; }
-    .form-row { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
-    .form-group { flex: 1; min-width: 200px; }
-    .form-group label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: #666; }
-    .form-group input, .form-group select { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; }
-    .btn { padding: 10px 24px; border: none; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
-    .btn-primary { background: #667eea; color: white; }
-    .btn-primary:hover { background: #5a6fd6; }
-    .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
-    .btn-secondary { background: #f0f0f0; color: #333; }
-    .status-bar { padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; }
-    .status-info { background: #e3f2fd; color: #1565c0; }
-    .status-success { background: #e8f5e9; color: #2e7d32; }
-    .status-error { background: #ffebee; color: #c62828; }
-    .result-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 16px; }
-    .result-card { border: 1px solid #eee; border-radius: 10px; padding: 16px; }
-    .result-card h3 { font-size: 16px; margin-bottom: 8px; color: #333; }
-    .result-card .field { margin-bottom: 8px; font-size: 13px; }
-    .result-card .field-label { color: #999; font-weight: 500; }
-    .result-card .field-value { color: #333; }
-    .result-card a { color: #667eea; text-decoration: none; }
-    .result-card a:hover { text-decoration: underline; }
-    .dm-list { margin-top: 8px; }
-    .dm-item { padding: 8px; background: #fafafa; border-radius: 6px; margin-bottom: 6px; font-size: 13px; }
-    .confidence { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 500; }
-    .conf-high { background: #e8f5e9; color: #2e7d32; }
-    .conf-mid { background: #fff3e0; color: #ef6c00; }
-    .conf-low { background: #fafafa; color: #999; }
-    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-    th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; font-size: 13px; }
-    th { font-weight: 600; color: #666; background: #fafafa; }
     #results-section { display: none; }
   </style>
 </head>
 <body>
-  <header>
+  <header class="app-header">
     <div class="container">
-      <h1>🔍 AI 获客系统</h1>
+      <h1>AI 获客系统</h1>
       <nav>
         <a href="/">扫描</a>
-        <a href="/enrich.html">补全</a>
+        <a href="/enrich.html" class="active">补全</a>
         <a href="/pipeline.html">全流程</a>
         <a href="/public-scan.html">公开 API</a>
+        <a href="/public-scan-logs.html">调用记录</a>
+        <a href="/resources.html">资源中心</a>
       </nav>
     </div>
   </header>
@@ -64,7 +27,7 @@
   <div class="container">
     <!-- 补全配置 -->
     <div class="card">
-      <h2>🧠 情报补全</h2>
+      <h2>情报补全</h2>
       <div class="form-row">
         <div class="form-group">
           <label>公司名称</label>
@@ -97,7 +60,7 @@
 
     <!-- 结果 -->
     <div id="results-section" class="card">
-      <h2>📊 补全结果</h2>
+      <h2>补全结果</h2>
       <div id="resultsContent"></div>
     </div>
   </div>

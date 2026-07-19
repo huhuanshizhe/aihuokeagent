@@ -4,60 +4,22 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI 获客 - 扫描面板</title>
+  <link rel="stylesheet" href="/theme.css">
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; }
-    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
-    header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px 0; margin-bottom: 24px; }
-    header .container { display: flex; justify-content: space-between; align-items: center; }
-    header h1 { font-size: 24px; font-weight: 600; }
-    nav a { color: white; text-decoration: none; margin-left: 20px; opacity: 0.9; }
-    nav a:hover { opacity: 1; }
-    .card { background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-    .card h2 { font-size: 18px; margin-bottom: 16px; color: #444; }
-    .form-row { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
-    .form-group { flex: 1; min-width: 200px; }
-    .form-group label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: #666; }
-    .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; }
-    .form-group textarea { resize: vertical; min-height: 80px; }
-    .btn { padding: 10px 24px; border: none; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
-    .btn-primary { background: #667eea; color: white; }
-    .btn-primary:hover { background: #5a6fd6; }
-    .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
-    .btn-secondary { background: #f0f0f0; color: #333; }
-    .btn-secondary:hover { background: #e0e0e0; }
-    .thai-cache-box { margin-top: 16px; padding: 14px 16px; background: #f8f9fc; border: 1px solid #e8eaef; border-radius: 8px; }
-    .thai-cache-box h3 { font-size: 14px; margin-bottom: 8px; color: #444; }
-    .thai-cache-meta { font-size: 13px; color: #666; line-height: 1.6; margin-bottom: 10px; }
-    .thai-cache-meta code { font-size: 12px; background: #eef1f6; padding: 1px 6px; border-radius: 4px; }
-    .status-bar { padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; }
-    .status-info { background: #e3f2fd; color: #1565c0; }
-    .status-success { background: #e8f5e9; color: #2e7d32; }
-    .status-error { background: #ffebee; color: #c62828; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
-    th { font-size: 13px; font-weight: 600; color: #666; background: #fafafa; }
-    td { font-size: 14px; }
-    tr:hover { background: #f9f9f9; }
-    .score { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 500; }
-    .score-high { background: #e8f5e9; color: #2e7d32; }
-    .score-mid { background: #fff3e0; color: #ef6c00; }
-    .score-low { background: #fafafa; color: #999; }
-    .actions { display: flex; gap: 8px; }
-    .tag { display: inline-block; padding: 2px 8px; background: #f0f0f0; border-radius: 4px; font-size: 12px; margin: 2px; }
     #results-section { display: none; }
-    .loading { text-align: center; padding: 40px; color: #999; }
   </style>
 </head>
 <body>
-  <header>
+  <header class="app-header">
     <div class="container">
-      <h1>🔍 AI 获客系统</h1>
+      <h1>AI 获客系统</h1>
       <nav>
-        <a href="/">扫描</a>
+        <a href="/" class="active">扫描</a>
         <a href="/enrich.html">补全</a>
         <a href="/pipeline.html">全流程</a>
         <a href="/public-scan.html">公开 API</a>
+        <a href="/public-scan-logs.html">调用记录</a>
+        <a href="/resources.html">资源中心</a>
       </nav>
     </div>
   </header>
@@ -65,7 +27,7 @@
   <div class="container">
     <!-- 扫描配置 -->
     <div class="card">
-      <h2>📋 扫描配置</h2>
+      <h2>扫描配置</h2>
       <div class="form-row">
         <div class="form-group">
           <label>公司名称（用于 AI 生成关键词）</label>
@@ -125,7 +87,7 @@
 
     <!-- 结果 -->
     <div id="results-section" class="card">
-      <h2>📊 扫描结果 <span id="resultCount" style="color:#999;font-size:14px"></span></h2>
+      <h2>扫描结果 <span id="resultCount" style="color:#999;font-size:14px"></span></h2>
       <div id="resultsContent">
         <div class="loading">等待扫描...</div>
       </div>
