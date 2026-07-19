@@ -66,7 +66,7 @@ Docker deployment, API authentication, and offline-client examples are documente
 - 扫描与补全在 HTTP 请求内同步执行，长任务不可靠
 - 缺少任务状态、重试、幂等和取消机制
 - 缺少配额、限流、成本统计和审计日志
-- 缺少 OpenAPI 文档、Webhook 签名和 SDK 友好的契约
+- 公开扫描契约已提供 OpenAPI 3.1（`/api-doc`、`/api/openapi.json`）；Webhook / 租户级契约仍待补齐
 - 与 VertaX 主项目中的 Radar/Prospect 数据模型存在重复
 
 ## 目标架构
@@ -214,7 +214,7 @@ GET  /api/resources/industries/:id  查看行业包
 
 - API Key 鉴权与 tenant 隔离
 - 异步 Job 模型、进度、重试、幂等和取消
-- OpenAPI 3.1 文档
+- OpenAPI 3.1 公开 API 文档（`docs/openapi.public.yaml` → `/api/openapi.json` + `/api-doc`）
 - Webhook 投递、签名和重试
 - 配额、限流、调用成本与审计日志
 

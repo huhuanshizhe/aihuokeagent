@@ -1,6 +1,7 @@
 /**
  * Copy runtime assets into dist so self-host can ship only `dist/` (+ node_modules).
  * - UI → dist/ui
+ * - docs (OpenAPI YAML) → dist/docs
  * - DIW CSV → dist/data/cache/thailand-factories.csv
  */
 import { cpSync, existsSync, mkdirSync, copyFileSync, statSync } from 'node:fs';
@@ -40,6 +41,7 @@ if (!existsSync(dist)) {
 
 copyDir(join(root, 'src', 'ui'), join(dist, 'ui'));
 copyDir(join(root, 'resources'), join(dist, 'resources'));
+copyDir(join(root, 'docs'), join(dist, 'docs'));
 const csvOk = copyFile(
   join(root, 'data', 'cache', 'thailand-factories.csv'),
   join(dist, 'data', 'cache', 'thailand-factories.csv'),

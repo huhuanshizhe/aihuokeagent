@@ -18,7 +18,8 @@
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.45.2",
     "express": "^4.21.0",
-    "pg": "^8.22.0"
+    "pg": "^8.22.0",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

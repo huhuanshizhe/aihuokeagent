@@ -18,9 +18,16 @@ import { configRouter } from './api/config.js';
 import { resourcesRouter } from './api/resources.js';
 import { publicScanRouter } from './api/public-scan.js';
 import { apiKeyAuth } from './api/auth.js';
+import { getOpenApiSpec } from './lib/openapi.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+function resolveUiRoot(): string {
+  const sourceUi = join(__dirname, '..', 'src', 'ui');
+  const compiledUi = join(__dirname, 'ui');
+  return existsSync(join(sourceUi, 'index.html')) ? sourceUi : compiledUi;
+}
 
 async function startServer() {
   // 初始化数据库
@@ -28,6 +35,7 @@ async function startServer() {
   await initSchema();
 
   const app = express();
+  const uiRoot = resolveUiRoot();
 
   // 中间件
   app.use(cors({
@@ -56,6 +64,31 @@ async function startServer() {
     res.json(payload);
   });
 
+  // OpenAPI contract (public, no API key) — same pattern as vexmotor-admin /api/openapi.json
+  const sendOpenApi = (_req: express.Request, res: express.Response) => {
+    try {
+      res.setHeader('Cache-Control', 'no-store');
+      res.json(getOpenApiSpec());
+    } catch (error) {
+      console.error('[openapi] failed to load spec:', error);
+      res.status(500).json({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        code: 'OPENAPI_LOAD_FAILED',
+      });
+    }
+  };
+  app.get('/api/openapi.json', sendOpenApi);
+  app.get('/api/openapi', sendOpenApi);
+
+  // Swagger UI page (public)
+  app.get('/api-doc', (_req, res) => {
+    res.sendFile(join(uiRoot, 'api-doc.html'));
+  });
+  app.get('/api-doc.html', (_req, res) => {
+    res.redirect(302, '/api-doc');
+  });
+
   // All business and configuration APIs are protected when SERVICE_API_KEY is set.
   app.use('/api', apiKeyAuth);
 
@@ -72,12 +105,6 @@ async function startServer() {
     res.status(404).json({ success: false, error: 'Not found', code: 'NOT_FOUND' });
   });
 
-  // 静态 UI：优先源码 ui（tsx / 开发），其次 dist/ui
-  const sourceUi = join(__dirname, '..', 'src', 'ui');
-  const compiledUi = join(__dirname, 'ui');
-  const uiRoot = existsSync(join(sourceUi, 'index.html'))
-    ? sourceUi
-    : compiledUi;
   app.use(express.static(uiRoot));
 
   // JSON body / 未捕获错误 → 统一 JSON，避免 HTML DOCTYPE
@@ -102,8 +129,10 @@ async function startServer() {
 
   app.listen(config.port, () => {
     console.log(`\n🚀 AI Lead Gen server running at http://localhost:${config.port}`);
-    console.log(`   UI: http://localhost:${config.port}/`);
-    console.log(`   API: http://localhost:${config.port}/api/health\n`);
+    console.log(`   UI:      http://localhost:${config.port}/`);
+    console.log(`   Docs:    http://localhost:${config.port}/api-doc`);
+    console.log(`   OpenAPI: http://localhost:${config.port}/api/openapi.json`);
+    console.log(`   Health:  http://localhost:${config.port}/api/health\n`);
   });
 }
 

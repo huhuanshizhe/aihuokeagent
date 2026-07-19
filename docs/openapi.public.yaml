@@ -1,0 +1,450 @@
+openapi: 3.1.0
+info:
+  title: AI获客 Agent — 公开 API
+  version: 1.0.0
+  description: |
+    对外（如 Vertax 客户端）可调用的公开扫描契约。
+
+    - 文档页：`/api-doc`（Swagger UI）
+    - 本规范 JSON：`/api/openapi.json`
+    - 存活检查：`GET /api/health`（无需鉴权）
+
+    当服务配置了 `SERVICE_API_KEY` 时，除 health / openapi / api-doc 外，
+    业务接口需携带 `Authorization: Bearer <key>` 或 `X-Api-Key: <key>`。
+servers:
+  - url: http://localhost:3100
+    description: Local default
+tags:
+  - name: Health
+    description: 存活与版本
+  - name: PublicScan
+    description: 公开同步扫描（单关键词 × 单国家）
+  - name: PublicScanLogs
+    description: 公开扫描调用审计
+
+paths:
+  /api/health:
+    get:
+      tags: [Health]
+      summary: 存活检查
+      description: 无需 API Key。不包含提供商密钥等敏感信息。
+      security: []
+      operationId: getHealth
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/public/scan:
+    post:
+      tags: [PublicScan]
+      summary: 公开同步扫描
+      description: |
+        一次请求：单个 `keyword` + 单个 `country`（ISO / 英文名 / 中文名均可，服务端归一为 ISO）。
+        适配器由服务端自动规划；`maxResults` 固定为 20，客户端无需也不应依赖自定义上限。
+      operationId: postPublicScan
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicScanRequest'
+            examples:
+              iso:
+                summary: ISO country
+                value:
+                  keyword: veterinary orthopedic implant distributor
+                  country: TH
+              chinese:
+                summary: Chinese country name
+                value:
+                  keyword: wedding photography studio
+                  country: 泰国
+                  clientContext:
+                    clientApp: vertax-local
+                    userId: user_123
+                    discoveryRunId: run_abc
+      responses:
+        '200':
+          description: 扫描完成
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicScanSuccessResponse'
+        '400':
+          description: 参数错误（如无法识别的国家）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: API Key 无效或缺失（仅当服务启用了 SERVICE_API_KEY）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 服务内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/public/scan/logs:
+    get:
+      tags: [PublicScanLogs]
+      summary: 调用审计列表
+      description: 分页查询公开扫描调用记录（精简字段）。
+      operationId: listPublicScanLogs
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: keyword
+          in: query
+          schema:
+            type: string
+        - name: country
+          in: query
+          schema:
+            type: string
+        - name: user
+          in: query
+          description: 匹配 userId / userName / userEmail
+          schema:
+            type: string
+        - name: from
+          in: query
+          description: ISO 时间下界
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: ISO 时间上界
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicScanLogsListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/public/scan/logs/{id}:
+    get:
+      tags: [PublicScanLogs]
+      summary: 调用审计详情
+      operationId: getPublicScanLog
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicScanLogDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: 记录不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Authorization Bearer + SERVICE_API_KEY
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: 与 Bearer 二选一
+
+  responses:
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalError:
+      description: Internal error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, timestamp, version, authRequired]
+      properties:
+        status:
+          type: string
+          example: ok
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+          example: '1.0.0'
+        authRequired:
+          type: boolean
+          description: 当前进程是否启用了 SERVICE_API_KEY
+        apiKey:
+          type: string
+          description: 仅当 EXPOSE_API_KEY_IN_UI=true 时返回（本地调试），生产勿开
+
+    PublicScanRequest:
+      type: object
+      required: [keyword, country]
+      additionalProperties: false
+      properties:
+        keyword:
+          type: string
+          minLength: 1
+          description: 单条英文搜索关键词（不含国家名亦可）
+        country:
+          type: string
+          minLength: 1
+          description: ISO-3166-1 alpha-2、英文国名或常见中文国名
+        clientContext:
+          type: object
+          additionalProperties: true
+          description: 可选客户端审计上下文（不影响扫描逻辑）
+          properties:
+            clientApp:
+              type: string
+            userId:
+              type: string
+            userName:
+              type: string
+            userEmail:
+              type: string
+            discoveryRunId:
+              type: string
+            triggerSource:
+              type: string
+
+    PublicScanSuccessResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/PublicScanResult'
+
+    PublicScanResult:
+      type: object
+      properties:
+        runId:
+          type: string
+        duration:
+          type: number
+          description: 毫秒
+        totalFetched:
+          type: integer
+        totalFound:
+          type: integer
+        totalNew:
+          type: integer
+        totalQualified:
+          type: integer
+        totalReview:
+          type: integer
+        totalRejected:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            type: string
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/NormalizedCandidate'
+        acceptedClientContext:
+          type: boolean
+
+    NormalizedCandidate:
+      type: object
+      properties:
+        id:
+          type: string
+        externalId:
+          type: string
+        sourceUrl:
+          type: string
+        displayName:
+          type: string
+        candidateType:
+          type: string
+          enum: [COMPANY, OPPORTUNITY, CONTACT]
+        description:
+          type: string
+        website:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        address:
+          type: string
+        country:
+          type: string
+        city:
+          type: string
+        industry:
+          type: string
+        qualificationTier:
+          type: string
+          enum: [qualified, review, rejected]
+        qualificationReasons:
+          type: array
+          items:
+            type: string
+        matchScore:
+          type: number
+
+    PublicScanLogsListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/PublicScanLogListItem'
+            page:
+              type: integer
+            pageSize:
+              type: integer
+            total:
+              type: integer
+
+    PublicScanLogListItem:
+      type: object
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+        runId:
+          type: string
+          nullable: true
+        keyword:
+          type: string
+        country:
+          type: string
+        countryCode:
+          type: string
+          nullable: true
+        resultCount:
+          type: integer
+        totalQualified:
+          type: integer
+        totalReview:
+          type: integer
+        durationMs:
+          type: integer
+        success:
+          type: boolean
+        errorMessage:
+          type: string
+          nullable: true
+        userId:
+          type: string
+          nullable: true
+        userName:
+          type: string
+          nullable: true
+        userEmail:
+          type: string
+          nullable: true
+        userCompany:
+          type: string
+          nullable: true
+        clientApp:
+          type: string
+          nullable: true
+        triggerSource:
+          type: string
+          nullable: true
+
+    PublicScanLogDetailResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          additionalProperties: true
+          description: 列表字段 + clientContext 等详情
+
+    ErrorResponse:
+      type: object
+      required: [success, error]
+      properties:
+        success:
+          type: boolean
+          const: false
+        error:
+          type: string
+        code:
+          type: string
+          examples: [INVALID_REQUEST, INVALID_API_KEY, NOT_FOUND, INTERNAL_ERROR]
+        details:
+          type: array
+          items:
+            type: string
